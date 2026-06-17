@@ -160,16 +160,16 @@ class DbHelper {
   Future<int> insertTransaction(TransactionItem item) async {
     if (kIsWeb) {
       _initWebDb();
-      final newId = _webDb!.isEmpty 
-          ? 1 
+      final newId = _webDb!.isEmpty
+          ? 1
           : (_webDb!.map((e) => e['id'] as int).reduce((a, b) => a > b ? a : b) + 1);
-      final map = item.toMap();
+      final map = item.toJson();
       map['id'] = newId;
       _webDb!.add(map);
       return newId;
     } else {
       final db = await instance.database;
-      return await db.insert('transactions', item.toMap());
+      return await db.insert('transactions', item.toJson());
     }
   }
 
@@ -178,7 +178,7 @@ class DbHelper {
       _initWebDb();
       final index = _webDb!.indexWhere((element) => element['id'] == item.id);
       if (index != -1) {
-        _webDb![index] = item.toMap();
+        _webDb![index] = item.toJson();
         return 1;
       }
       return 0;
@@ -186,7 +186,7 @@ class DbHelper {
       final db = await instance.database;
       return await db.update(
         'transactions',
-        item.toMap(),
+        item.toJson(),
         where: 'id = ?',
         whereArgs: [item.id],
       );
@@ -219,7 +219,7 @@ class DbHelper {
           .toList();
           
       items.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
-      return items.map((json) => TransactionItem.fromMap(json)).toList();
+      return items.map((json) => TransactionItem.fromJson(json)).toList();
     } else {
       final db = await instance.database;
       final monthStr = month.toString().padLeft(2, '0');
@@ -298,7 +298,7 @@ class DbHelper {
           year: row['year'] as int,
           month: row['month'] as int,
           totalIncome: (row['total_income'] as num?)?.toDouble() ?? 0.0,
-          totalCost: (row['total_cost'] as num?)?.toDouble() ?? 0.0;
+          totalCost: (row['total_cost'] as num?)?.toDouble() ?? 0.0,
         );
       }).toList();
     }

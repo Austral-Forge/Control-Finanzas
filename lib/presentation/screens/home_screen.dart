@@ -7,6 +7,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../data/models/monthly_summary.dart';
 import '../../data/models/transaction_item.dart';
+import '../widgets/index.dart';
 import 'detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -59,11 +60,16 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           } else if (state is FinanceLoaded) {
             if (state.summaries.isEmpty) {
-              return _buildEmptyState();
+              return const EmptyState();
             }
             return _buildContent(state.summaries);
           } else if (state is FinanceError) {
-            return _buildErrorState(state.message);
+            return ErrorState(
+              message: state.message,
+              onRetry: () {
+                context.read<FinanceBloc>().add(LoadFinanceSummaries());
+              },
+            );
           }
           return const SizedBox();
         },
@@ -76,66 +82,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.account_balance_wallet_outlined,
-              size: 80,
-              color: AppTheme.textMuted.withOpacity(0.5),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'No hay transacciones aún',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: AppTheme.textPrimary,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Agrega tu primer ingreso o costo usando el botón flotante.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildErrorState(String message) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 60, color: AppTheme.cost),
-            const SizedBox(height: 16),
-            Text(
-              'Error al cargar finanzas',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: AppTheme.textPrimary,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () {
-                context.read<FinanceBloc>().add(LoadFinanceSummaries());
-              },
-              child: const Text('Reintentar'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildContent(List<MonthlySummary> summaries) {
     // Calcular balance general total de ahorro
@@ -151,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Tarjeta de balance general (Ahorro Total acumulado)
-          _buildTotalBalanceCard(totalAhorro),
+          BalanceCard(totalBalance: totalAhorro),
           const SizedBox(height: 30),
           Text(
             'Historial Mensual',
@@ -166,7 +112,20 @@ class _HomeScreenState extends State<HomeScreen> {
             separatorBuilder: (context, index) => const SizedBox(height: 16),
             itemBuilder: (context, index) {
               final summary = summaries[index];
-              return _buildMonthCard(summary);
+              return MonthCard(
+                summary: summary,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => DetailScreen(
+                        year: summary.year,
+                        month: summary.month,
+                      ),
+                    ),
+                  );
+                },
+              );
             },
           ),
         ],
@@ -174,209 +133,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTotalBalanceCard(double totalBalance) {
-    final isDeficit = totalBalance < 0;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.primary.withOpacity(0.12),
-            AppTheme.primary.withOpacity(0.02),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(
-          color: AppTheme.primary.withOpacity(0.15),
-          width: 1.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'BALANCE GENERAL DE AHORROS',
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  letterSpacing: 1.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textSecondary,
-                ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                CurrencyFormatter.format(totalBalance),
-                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                      color: isDeficit ? AppTheme.cost : AppTheme.income,
-                      fontSize: 36,
-                    ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                isDeficit ? 'Déficit acumulado' : 'Ahorro Neto',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: isDeficit ? AppTheme.cost.withOpacity(0.7) : AppTheme.income.withOpacity(0.7),
-                      fontWeight: FontWeight.w500,
-                    ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMonthCard(MonthlySummary summary) {
-    final monthName = CurrencyFormatter.getMonthName(summary.month);
-    final isDeficit = summary.isDeficit;
-
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => DetailScreen(
-              year: summary.year,
-              month: summary.month,
-            ),
-          ),
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.06),
-            width: 1.0,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.2),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Fila de Cabecera (Mes / Estado)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '$monthName ${summary.year}',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 20,
-                      ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: (isDeficit ? AppTheme.cost : AppTheme.income).withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  child: Text(
-                    isDeficit ? 'Déficit' : 'Ahorro',
-                    style: TextStyle(
-                      color: isDeficit ? AppTheme.cost : AppTheme.income,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            // Línea de Operación Visual (Ingreso - Costo = Balance)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Ingresos', style: TextStyle(color: AppTheme.textSecondary)),
-                    Text(
-                      CurrencyFormatter.format(summary.totalIncome),
-                      style: const TextStyle(
-                        color: AppTheme.income,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Costos', style: TextStyle(color: AppTheme.textSecondary)),
-                    Text(
-                      CurrencyFormatter.format(summary.totalCost),
-                      style: const TextStyle(
-                        color: AppTheme.cost,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 10),
-                  child: Divider(color: Colors.white12, height: 1),
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      isDeficit ? 'Déficit Mensual' : 'Ahorro Mensual',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      '${CurrencyFormatter.format(summary.totalIncome)} - ${CurrencyFormatter.format(summary.totalCost)} = ${CurrencyFormatter.format(summary.balance)}',
-                      style: TextStyle(
-                        color: isDeficit ? AppTheme.cost : AppTheme.income,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text(
-                  'Ver detalle',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const SizedBox(width: 4),
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  size: 12,
-                  color: AppTheme.primary,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   void _showAddTransactionDialog(BuildContext context) {
     String type = 'income';
