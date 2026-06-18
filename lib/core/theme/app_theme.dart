@@ -5,10 +5,11 @@ class AppTheme {
   static const Color background = Color(0xFF0B0B0D);
   static const Color surface = Color(0xFF141419);
   static const Color surfaceLight = Color(0xFF1E1E24);
-  
+
   static const Color primary = Color(0xFF8B5CF6); // Purple neon
-  static const Color income = Color(0xFF10B981);  // Emerald green
-  static const Color cost = Color(0xFFF43F5E);    // Coral/Rose
+  static const Color income = Color(0xFF10B981); // Emerald green
+  static const Color cost = Color(0xFFDC2626); // Opaque red
+  static const Color savings = Color(0xFF3B82F6); // Blue
   static const Color textPrimary = Color(0xFFF9FAFB);
   static const Color textSecondary = Color(0xFF9CA3AF);
   static const Color textMuted = Color(0xFF6B7280);
@@ -68,7 +69,7 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
           side: BorderSide(
-            color: Colors.white.withOpacity(0.05),
+            color: Colors.white.withValues(alpha: 0.05),
             width: 1,
           ),
         ),
@@ -88,9 +89,7 @@ class AppTheme {
         backgroundColor: primary,
         foregroundColor: Colors.white,
         elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -99,11 +98,11 @@ class AppTheme {
         labelStyle: GoogleFonts.outfit(color: textSecondary, fontSize: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),

@@ -28,3 +28,15 @@ class DeleteTransaction extends FinanceEvent {
     required this.month,
   });
 }
+
+class AddChildTransaction extends FinanceEvent {
+  final TransactionItem child;
+  final int year;
+  final int month;
+
+  AddChildTransaction({
+    required this.child,
+    required this.year,
+    required this.month,
+  });
+}

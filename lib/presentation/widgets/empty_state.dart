@@ -25,14 +25,14 @@ class EmptyState extends StatelessWidget {
             Icon(
               icon,
               size: 80,
-              color: AppTheme.textMuted.withOpacity(0.5),
+              color: AppTheme.textMuted.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 20),
             Text(
               title,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: AppTheme.textPrimary,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(color: AppTheme.textPrimary),
             ),
             const SizedBox(height: 8),
             Text(

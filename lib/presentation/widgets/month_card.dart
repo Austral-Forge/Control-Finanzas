@@ -7,11 +7,7 @@ class MonthCard extends StatelessWidget {
   final MonthlySummary summary;
   final VoidCallback onTap;
 
-  const MonthCard({
-    super.key,
-    required this.summary,
-    required this.onTap,
-  });
+  const MonthCard({super.key, required this.summary, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -26,12 +22,12 @@ class MonthCard extends StatelessWidget {
           color: AppTheme.surface,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: Colors.white.withOpacity(0.06),
+            color: Colors.white.withValues(alpha: 0.06),
             width: 1.0,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.2),
+              color: Colors.black.withValues(alpha: 0.2),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -47,21 +43,24 @@ class MonthCard extends StatelessWidget {
                 Text(
                   '$monthName ${summary.year}',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 20,
-                      ),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 20,
+                  ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
-                    color: (isDeficit ? AppTheme.cost : AppTheme.income)
-                        .withOpacity(0.12),
+                    color: (isDeficit ? AppTheme.cost : AppTheme.savings)
+                        .withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: Text(
                     isDeficit ? 'Déficit' : 'Ahorro',
                     style: TextStyle(
-                      color: isDeficit ? AppTheme.cost : AppTheme.income,
+                      color: isDeficit ? AppTheme.cost : AppTheme.savings,
                       fontWeight: FontWeight.w600,
                       fontSize: 12,
                     ),
@@ -77,8 +76,10 @@ class MonthCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Ingresos',
-                        style: TextStyle(color: AppTheme.textSecondary)),
+                    const Text(
+                      'Ingresos',
+                      style: TextStyle(color: AppTheme.textSecondary),
+                    ),
                     Text(
                       CurrencyFormatter.format(summary.totalIncome),
                       style: const TextStyle(
@@ -92,8 +93,10 @@ class MonthCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Costos',
-                        style: TextStyle(color: AppTheme.textSecondary)),
+                    const Text(
+                      'Costos',
+                      style: TextStyle(color: AppTheme.textSecondary),
+                    ),
                     Text(
                       CurrencyFormatter.format(summary.totalCost),
                       style: const TextStyle(
@@ -120,7 +123,7 @@ class MonthCard extends StatelessWidget {
                     Text(
                       '${CurrencyFormatter.format(summary.totalIncome)} - ${CurrencyFormatter.format(summary.totalCost)} = ${CurrencyFormatter.format(summary.balance)}',
                       style: TextStyle(
-                        color: isDeficit ? AppTheme.cost : AppTheme.income,
+                        color: isDeficit ? AppTheme.cost : AppTheme.savings,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -135,9 +138,9 @@ class MonthCard extends StatelessWidget {
                 Text(
                   'Ver detalle',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: AppTheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(width: 4),
                 const Icon(

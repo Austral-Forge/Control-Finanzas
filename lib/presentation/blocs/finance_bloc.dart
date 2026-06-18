@@ -11,6 +11,7 @@ class FinanceBloc extends Bloc<FinanceEvent, FinanceState> {
     on<LoadMonthDetails>(_onLoadMonthDetails);
     on<AddTransaction>(_onAddTransaction);
     on<DeleteTransaction>(_onDeleteTransaction);
+    on<AddChildTransaction>(_onAddChildTransaction);
   }
 
   Future<void> _onLoadFinanceSummaries(
@@ -42,7 +43,6 @@ class FinanceBloc extends Bloc<FinanceEvent, FinanceState> {
           event.year,
           event.month,
         );
-        // Recargar resúmenes también, por si cambiaron
         final summaries = await financeRepository.getMonthlySummaries();
         emit(currentState.copyWith(
           summaries: summaries,
@@ -64,13 +64,14 @@ class FinanceBloc extends Bloc<FinanceEvent, FinanceState> {
       try {
         await financeRepository.addTransaction(event.transaction);
         final summaries = await financeRepository.getMonthlySummaries();
-        
-        // Si el mes de la transacción añadida coincide con el seleccionado actualmente, recargamos
+
         final txnYear = event.transaction.date.year;
         final txnMonth = event.transaction.date.month;
-        
-        if (currentState.selectedYear == txnYear && currentState.selectedMonth == txnMonth) {
-          final transactions = await financeRepository.getTransactionsForMonth(txnYear, txnMonth);
+
+        if (currentState.selectedYear == txnYear &&
+            currentState.selectedMonth == txnMonth) {
+          final transactions =
+              await financeRepository.getTransactionsForMonth(txnYear, txnMonth);
           emit(currentState.copyWith(
             summaries: summaries,
             selectedMonthTransactions: transactions,
@@ -97,7 +98,30 @@ class FinanceBloc extends Bloc<FinanceEvent, FinanceState> {
           event.year,
           event.month,
         );
-        
+
+        emit(currentState.copyWith(
+          summaries: summaries,
+          selectedMonthTransactions: transactions,
+        ));
+      } catch (e) {
+        emit(FinanceError(message: e.toString()));
+      }
+    }
+  }
+
+  Future<void> _onAddChildTransaction(
+    AddChildTransaction event,
+    Emitter<FinanceState> emit,
+  ) async {
+    final currentState = state;
+    if (currentState is FinanceLoaded) {
+      try {
+        await financeRepository.addTransaction(event.child);
+        final summaries = await financeRepository.getMonthlySummaries();
+        final transactions = await financeRepository.getTransactionsForMonth(
+          event.year,
+          event.month,
+        );
         emit(currentState.copyWith(
           summaries: summaries,
           selectedMonthTransactions: transactions,

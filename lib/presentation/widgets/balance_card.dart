@@ -6,11 +6,7 @@ class BalanceCard extends StatelessWidget {
   final double totalBalance;
   final String? title;
 
-  const BalanceCard({
-    super.key,
-    required this.totalBalance,
-    this.title,
-  });
+  const BalanceCard({super.key, required this.totalBalance, this.title});
 
   @override
   Widget build(BuildContext context) {
@@ -21,15 +17,15 @@ class BalanceCard extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            AppTheme.primary.withOpacity(0.12),
-            AppTheme.primary.withOpacity(0.02),
+            AppTheme.primary.withValues(alpha: 0.12),
+            AppTheme.primary.withValues(alpha: 0.02),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(28),
         border: Border.all(
-          color: AppTheme.primary.withOpacity(0.15),
+          color: AppTheme.primary.withValues(alpha: 0.15),
           width: 1.5,
         ),
       ),
@@ -39,10 +35,10 @@ class BalanceCard extends StatelessWidget {
           Text(
             title ?? 'BALANCE GENERAL DE AHORROS',
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  letterSpacing: 1.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textSecondary,
-                ),
+              letterSpacing: 1.5,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textSecondary,
+            ),
           ),
           const SizedBox(height: 12),
           Row(
@@ -52,19 +48,19 @@ class BalanceCard extends StatelessWidget {
               Text(
                 CurrencyFormatter.format(totalBalance),
                 style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                      color: isDeficit ? AppTheme.cost : AppTheme.income,
-                      fontSize: 36,
-                    ),
+                  color: isDeficit ? AppTheme.cost : AppTheme.savings,
+                  fontSize: 36,
+                ),
               ),
               const SizedBox(width: 8),
               Text(
                 isDeficit ? 'Déficit acumulado' : 'Ahorro Neto',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: isDeficit
-                          ? AppTheme.cost.withOpacity(0.7)
-                          : AppTheme.income.withOpacity(0.7),
-                      fontWeight: FontWeight.w500,
-                    ),
+                  color: isDeficit
+                      ? AppTheme.cost.withValues(alpha: 0.7)
+                      : AppTheme.savings.withValues(alpha: 0.7),
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
