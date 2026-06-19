@@ -3,6 +3,7 @@ import '../../data/models/monthly_summary.dart';
 import '../../data/models/income_source.dart';
 import '../../data/models/payment_method.dart';
 import '../../data/models/expense_category.dart';
+import '../../data/models/installment.dart';
 
 abstract class FinanceRepository {
   Future<List<MonthlySummary>> getMonthlySummaries();
@@ -20,4 +21,13 @@ abstract class FinanceRepository {
   Future<void> deletePaymentMethod(int id);
 
   Future<List<ExpenseCategory>> getExpenseCategories();
+  Future<void> addExpenseCategory(ExpenseCategory category);
+  Future<void> updateExpenseCategory(ExpenseCategory category);
+  Future<void> deleteExpenseCategory(int id);
+  Future<bool> expenseCategoryKeyExists(String key);
+
+  Future<List<Installment>> getInstallments();
+  Future<void> addInstallment(Installment installment);
+  Future<void> updateInstallment(Installment installment);
+  Future<void> deleteInstallment(int id);
 }

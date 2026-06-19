@@ -5,6 +5,7 @@ import '../blocs/settings_event.dart';
 import '../blocs/settings_state.dart';
 import '../blocs/theme_cubit.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/context_theme_x.dart';
 import '../../core/constants/expense_sections.dart';
 import '../../data/models/income_source.dart';
 import '../../data/models/payment_method.dart';
@@ -36,8 +37,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Configuracion'),
@@ -53,7 +52,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: CircularProgressIndicator(color: AppTheme.primary),
             );
           } else if (state is SettingsLoaded) {
-            return _buildContent(state, isDark);
+            return _buildContent(state);
           } else if (state is SettingsError) {
             return Center(child: Text('Error: ${state.message}'));
           }
@@ -63,7 +62,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildContent(SettingsLoaded state, bool isDark) {
+  Widget _buildContent(SettingsLoaded state) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
@@ -72,7 +71,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           _buildSectionHeader('Apariencia', Icons.palette_outlined, AppTheme.primary),
           const SizedBox(height: 12),
-          _buildThemeToggle(isDark),
+          _buildThemeToggle(),
           const SizedBox(height: 32),
           _buildSectionHeader('Fuentes de Ingreso', Icons.trending_up, AppTheme.income),
           const SizedBox(height: 12),
@@ -119,7 +118,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           Text(
             'Las categorias estan predefinidas y se clasifican automaticamente en secciones.',
-            style: TextStyle(color: Theme.of(context).textTheme.labelLarge?.color, fontSize: 13),
+            style: TextStyle(color: context.mutedTextColor, fontSize: 13),
           ),
           const SizedBox(height: 16),
           _buildExpenseCategoriesReadOnly(state.expenseCategories),
@@ -127,10 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Center(
             child: Text(
               'Control Finanzas Card v1.0.0',
-              style: TextStyle(
-                color: Theme.of(context).textTheme.labelLarge?.color,
-                fontSize: 12,
-              ),
+              style: TextStyle(color: context.mutedTextColor, fontSize: 12),
             ),
           ),
         ],
@@ -138,18 +134,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildThemeToggle(bool isDark) {
-    final surfColor = Theme.of(context).colorScheme.surface;
-    final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.06)
-        : Colors.black.withValues(alpha: 0.08);
+  Widget _buildThemeToggle() {
+    final isDark = context.isDark;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: surfColor,
+        color: context.surfaceColor,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: borderColor),
+        border: Border.all(color: context.cardBorderColor),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -206,18 +199,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required Function(dynamic) onDelete,
     required String Function(dynamic) nameGetter,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surfColor = Theme.of(context).colorScheme.surface;
-    final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.06)
-        : Colors.black.withValues(alpha: 0.08);
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: surfColor,
+        color: context.surfaceColor,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: borderColor),
+        border: Border.all(color: context.cardBorderColor),
       ),
       child: Column(
         children: [
@@ -226,7 +213,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 children: [
-                  Icon(Icons.circle, size: 6, color: Theme.of(context).textTheme.labelLarge?.color),
+                  Icon(Icons.circle, size: 6, color: context.mutedTextColor),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -243,7 +230,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             );
           }),
-          Divider(color: isDark ? Colors.white12 : Colors.black12),
+          Divider(color: context.dividerColor),
           Row(
             children: [
               Expanded(
@@ -271,15 +258,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildExpenseCategoriesReadOnly(List<ExpenseCategory> categories) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surfColor = Theme.of(context).colorScheme.surface;
-    final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.06)
-        : Colors.black.withValues(alpha: 0.08);
-
     final grouped = <ExpenseSection, List<ExpenseCategory>>{};
     for (final cat in categories) {
-      final section = ExpenseSections.getSection(cat.key);
+      final section = ExpenseSections.parseSection(cat.section);
       grouped.putIfAbsent(section, () => []).add(cat);
     }
 
@@ -298,9 +279,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: surfColor,
+            color: context.surfaceColor,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: borderColor),
+            border: Border.all(color: context.cardBorderColor),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

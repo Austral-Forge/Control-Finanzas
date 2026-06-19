@@ -5,6 +5,7 @@ import '../models/monthly_summary.dart';
 import '../models/income_source.dart';
 import '../models/payment_method.dart';
 import '../models/expense_category.dart';
+import '../models/installment.dart';
 
 class FinanceRepositoryImpl implements FinanceRepository {
   final DbHelper _dbHelper = DbHelper.instance;
@@ -67,5 +68,45 @@ class FinanceRepositoryImpl implements FinanceRepository {
   @override
   Future<List<ExpenseCategory>> getExpenseCategories() {
     return _dbHelper.getExpenseCategories();
+  }
+
+  @override
+  Future<void> addExpenseCategory(ExpenseCategory category) async {
+    await _dbHelper.insertExpenseCategory(category);
+  }
+
+  @override
+  Future<void> updateExpenseCategory(ExpenseCategory category) async {
+    await _dbHelper.updateExpenseCategory(category);
+  }
+
+  @override
+  Future<void> deleteExpenseCategory(int id) async {
+    await _dbHelper.deleteExpenseCategory(id);
+  }
+
+  @override
+  Future<bool> expenseCategoryKeyExists(String key) {
+    return _dbHelper.expenseCategoryKeyExists(key);
+  }
+
+  @override
+  Future<List<Installment>> getInstallments() {
+    return _dbHelper.getInstallments();
+  }
+
+  @override
+  Future<void> addInstallment(Installment installment) async {
+    await _dbHelper.insertInstallment(installment);
+  }
+
+  @override
+  Future<void> updateInstallment(Installment installment) async {
+    await _dbHelper.updateInstallment(installment);
+  }
+
+  @override
+  Future<void> deleteInstallment(int id) async {
+    await _dbHelper.deleteInstallment(id);
   }
 }

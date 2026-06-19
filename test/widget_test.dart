@@ -4,6 +4,7 @@ import 'package:mis_finanzas/data/models/transaction_item.dart';
 import 'package:mis_finanzas/data/models/income_source.dart';
 import 'package:mis_finanzas/data/models/payment_method.dart';
 import 'package:mis_finanzas/data/models/expense_category.dart';
+import 'package:mis_finanzas/data/models/installment.dart';
 import 'package:mis_finanzas/domain/repositories/finance_repository.dart';
 
 class FakeFinanceRepository implements FinanceRepository {
@@ -48,6 +49,30 @@ class FakeFinanceRepository implements FinanceRepository {
 
   @override
   Future<List<ExpenseCategory>> getExpenseCategories() async => [];
+
+  @override
+  Future<void> addExpenseCategory(ExpenseCategory category) async {}
+
+  @override
+  Future<void> updateExpenseCategory(ExpenseCategory category) async {}
+
+  @override
+  Future<void> deleteExpenseCategory(int id) async {}
+
+  @override
+  Future<bool> expenseCategoryKeyExists(String key) async => false;
+
+  @override
+  Future<List<Installment>> getInstallments() async => [];
+
+  @override
+  Future<void> addInstallment(Installment installment) async {}
+
+  @override
+  Future<void> updateInstallment(Installment installment) async {}
+
+  @override
+  Future<void> deleteInstallment(int id) async {}
 }
 
 void main() {

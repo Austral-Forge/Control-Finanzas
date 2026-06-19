@@ -1,0 +1,58 @@
+import 'installment.dart';
+
+/// Proyección del mes siguiente al último mes con datos reales.
+///
+/// Parte del saldo arrastrado de los meses anteriores (positivo o negativo) y
+/// le resta las cuotas comprometidas que vencen ese mes. No asume ingresos
+/// futuros (decisión de producto).
+class ProjectedMonth {
+  final int year;
+  final int month;
+
+  /// Ahorro neto acumulado de todos los meses reales anteriores.
+  final double carriedBalance;
+
+  /// Cuotas con un pago pendiente en este mes.
+  final List<Installment> dueInstallments;
+
+  const ProjectedMonth({
+    required this.year,
+    required this.month,
+    required this.carriedBalance,
+    required this.dueInstallments,
+  });
+
+  /// Suma de las cuotas que vencen este mes.
+  double get projectedExpenses => dueInstallments.fold(
+        0.0,
+        (sum, i) => sum + i.dueAmountForMonth(year, month),
+      );
+
+  /// Saldo proyectado al cierre del mes.
+  double get projectedBalance => carriedBalance - projectedExpenses;
+
+  bool get isDeficit => projectedBalance < 0;
+
+  bool get hasInstallments => dueInstallments.isNotEmpty;
+
+  /// Construye la proyección del mes siguiente a [lastYear]/[lastMonth] tomando
+  /// solo las cuotas con un pago pendiente ese mes.
+  factory ProjectedMonth.next({
+    required int lastYear,
+    required int lastMonth,
+    required double carriedBalance,
+    required List<Installment> installments,
+  }) {
+    final nextMonth = lastMonth == 12 ? 1 : lastMonth + 1;
+    final nextYear = lastMonth == 12 ? lastYear + 1 : lastYear;
+    final due = installments
+        .where((i) => i.dueAmountForMonth(nextYear, nextMonth) > 0)
+        .toList();
+    return ProjectedMonth(
+      year: nextYear,
+      month: nextMonth,
+      carriedBalance: carriedBalance,
+      dueInstallments: due,
+    );
+  }
+}

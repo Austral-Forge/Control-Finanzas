@@ -6,6 +6,7 @@ import '../models/monthly_summary.dart';
 import '../models/income_source.dart';
 import '../models/payment_method.dart';
 import '../models/expense_category.dart';
+import '../models/installment.dart';
 
 class DbHelper {
   static final DbHelper instance = DbHelper._init();
@@ -16,6 +17,7 @@ class DbHelper {
   static List<Map<String, dynamic>>? _webIncomeSources;
   static List<Map<String, dynamic>>? _webPaymentMethods;
   static List<Map<String, dynamic>>? _webExpenseCategories;
+  static List<Map<String, dynamic>>? _webInstallments;
 
   DbHelper._init();
 
@@ -34,7 +36,7 @@ class DbHelper {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -83,9 +85,26 @@ class DbHelper {
       )
     ''');
 
+    await db.execute(_createInstallmentsTableSql);
+
     await _seedExpenseCategories(db);
     await _seedDefaults(db);
   }
+
+  static const String _createInstallmentsTableSql = '''
+    CREATE TABLE installments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      description TEXT NOT NULL,
+      category TEXT NOT NULL,
+      payment_method_id INTEGER,
+      monthly_amount REAL NOT NULL,
+      installment_count INTEGER NOT NULL,
+      paid_count INTEGER NOT NULL DEFAULT 0,
+      start_year INTEGER NOT NULL,
+      start_month INTEGER NOT NULL,
+      FOREIGN KEY (payment_method_id) REFERENCES payment_methods(id)
+    )
+  ''';
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
@@ -156,6 +175,10 @@ class DbHelper {
 
       await db.insert('payment_methods', {'name': 'Efectivo'},
           conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+
+    if (oldVersion < 3) {
+      await db.execute(_createInstallmentsTableSql);
     }
   }
 
@@ -252,6 +275,8 @@ class DbHelper {
     _webPaymentMethods = [
       {'id': 1, 'name': 'Efectivo'},
     ];
+
+    _webInstallments = [];
 
     _webDb = [];
     final now = DateTime.now();
@@ -513,7 +538,7 @@ class DbHelper {
     }
   }
 
-  // --- Expense Categories (read-only) ---
+  // --- Expense Categories CRUD ---
 
   Future<List<ExpenseCategory>> getExpenseCategories() async {
     if (kIsWeb) {
@@ -524,6 +549,114 @@ class DbHelper {
       final result = await db.query('expense_categories', orderBy: 'section ASC, display_name ASC');
       return result.map((m) => ExpenseCategory.fromMap(m)).toList();
     }
+  }
+
+  Future<int> insertExpenseCategory(ExpenseCategory category) async {
+    if (kIsWeb) {
+      _initWebDb();
+      final newId = _nextWebId(_webExpenseCategories!);
+      _webExpenseCategories!.add(category.toMap()..['id'] = newId);
+      return newId;
+    } else {
+      final db = await instance.database;
+      return await db.insert('expense_categories', category.toMap());
+    }
+  }
+
+  Future<int> updateExpenseCategory(ExpenseCategory category) async {
+    if (kIsWeb) {
+      _initWebDb();
+      final index =
+          _webExpenseCategories!.indexWhere((e) => e['id'] == category.id);
+      if (index == -1) return 0;
+      _webExpenseCategories![index] = category.toMap()..['id'] = category.id;
+      return 1;
+    } else {
+      final db = await instance.database;
+      return await db.update('expense_categories', category.toMap(),
+          where: 'id = ?', whereArgs: [category.id]);
+    }
+  }
+
+  Future<int> deleteExpenseCategory(int id) async {
+    if (kIsWeb) {
+      _initWebDb();
+      _webExpenseCategories!.removeWhere((e) => e['id'] == id);
+      return 1;
+    } else {
+      final db = await instance.database;
+      return await db.delete('expense_categories', where: 'id = ?', whereArgs: [id]);
+    }
+  }
+
+  /// ¿Existe ya una categoría con esta key? Útil para garantizar slugs únicos.
+  Future<bool> expenseCategoryKeyExists(String key) async {
+    if (kIsWeb) {
+      _initWebDb();
+      return _webExpenseCategories!.any((e) => e['key'] == key);
+    } else {
+      final db = await instance.database;
+      final rows = await db.query('expense_categories',
+          where: 'key = ?', whereArgs: [key], limit: 1);
+      return rows.isNotEmpty;
+    }
+  }
+
+  // --- Installments CRUD ---
+
+  Future<List<Installment>> getInstallments() async {
+    if (kIsWeb) {
+      _initWebDb();
+      return _webInstallments!.map((m) => Installment.fromMap(m)).toList();
+    } else {
+      final db = await instance.database;
+      final result = await db.query('installments', orderBy: 'description ASC');
+      return result.map((m) => Installment.fromMap(m)).toList();
+    }
+  }
+
+  Future<int> insertInstallment(Installment installment) async {
+    if (kIsWeb) {
+      _initWebDb();
+      final newId = _nextWebId(_webInstallments!);
+      _webInstallments!.add(installment.toMap()..['id'] = newId);
+      return newId;
+    } else {
+      final db = await instance.database;
+      return await db.insert('installments', installment.toMap());
+    }
+  }
+
+  Future<int> updateInstallment(Installment installment) async {
+    if (kIsWeb) {
+      _initWebDb();
+      final index =
+          _webInstallments!.indexWhere((e) => e['id'] == installment.id);
+      if (index == -1) return 0;
+      _webInstallments![index] = installment.toMap()..['id'] = installment.id;
+      return 1;
+    } else {
+      final db = await instance.database;
+      return await db.update('installments', installment.toMap(),
+          where: 'id = ?', whereArgs: [installment.id]);
+    }
+  }
+
+  Future<int> deleteInstallment(int id) async {
+    if (kIsWeb) {
+      _initWebDb();
+      _webInstallments!.removeWhere((e) => e['id'] == id);
+      return 1;
+    } else {
+      final db = await instance.database;
+      return await db.delete('installments', where: 'id = ?', whereArgs: [id]);
+    }
+  }
+
+  /// Siguiente id incremental para las listas en memoria del fallback web.
+  int _nextWebId(List<Map<String, dynamic>> rows) {
+    if (rows.isEmpty) return 1;
+    return rows.map((e) => e['id'] as int).reduce((a, b) => a > b ? a : b) + 1;
   }
 
   // --- Close ---
