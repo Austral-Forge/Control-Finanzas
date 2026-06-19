@@ -13,21 +13,23 @@ class MonthCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final monthName = CurrencyFormatter.getMonthName(summary.month);
     final isDeficit = summary.isDeficit;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfColor = Theme.of(context).colorScheme.surface;
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.08);
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: AppTheme.surface,
+          color: surfColor,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.06),
-            width: 1.0,
-          ),
+          border: Border.all(color: borderColor, width: 1.0),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.08),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -36,7 +38,6 @@ class MonthCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header (Month / Status)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -48,17 +49,14 @@ class MonthCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: (isDeficit ? AppTheme.cost : AppTheme.savings)
                         .withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: Text(
-                    isDeficit ? 'Déficit' : 'Ahorro',
+                    isDeficit ? 'Deficit' : 'Ahorro',
                     style: TextStyle(
                       color: isDeficit ? AppTheme.cost : AppTheme.savings,
                       fontWeight: FontWeight.w600,
@@ -69,23 +67,16 @@ class MonthCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 18),
-            // Summary rows
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Ingresos',
-                      style: TextStyle(color: AppTheme.textSecondary),
-                    ),
+                    Text('Ingresos', style: Theme.of(context).textTheme.bodyMedium),
                     Text(
                       CurrencyFormatter.format(summary.totalIncome),
-                      style: const TextStyle(
-                        color: AppTheme.income,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: AppTheme.income, fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -93,31 +84,25 @@ class MonthCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Costos',
-                      style: TextStyle(color: AppTheme.textSecondary),
-                    ),
+                    Text('Costos', style: Theme.of(context).textTheme.bodyMedium),
                     Text(
                       CurrencyFormatter.format(summary.totalCost),
-                      style: const TextStyle(
-                        color: AppTheme.cost,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: AppTheme.cost, fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 10),
-                  child: Divider(color: Colors.white12, height: 1),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Divider(color: isDark ? Colors.white12 : Colors.black12, height: 1),
                 ),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      isDeficit ? 'Déficit Mensual' : 'Ahorro Mensual',
-                      style: const TextStyle(
+                      isDeficit ? 'Deficit Mensual' : 'Ahorro Mensual',
+                      style: TextStyle(
                         fontWeight: FontWeight.w500,
-                        color: AppTheme.textPrimary,
+                        color: Theme.of(context).textTheme.bodyLarge?.color,
                       ),
                     ),
                     Text(
@@ -143,11 +128,7 @@ class MonthCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 4),
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  size: 12,
-                  color: AppTheme.primary,
-                ),
+                const Icon(Icons.arrow_forward_ios, size: 12, color: AppTheme.primary),
               ],
             ),
           ],

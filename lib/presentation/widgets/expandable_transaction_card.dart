@@ -12,6 +12,7 @@ class ExpandableTransactionCard extends StatefulWidget {
   final int year;
   final int month;
   final VoidCallback? onAddChild;
+  final VoidCallback? onEdit;
 
   const ExpandableTransactionCard({
     super.key,
@@ -19,6 +20,7 @@ class ExpandableTransactionCard extends StatefulWidget {
     required this.year,
     required this.month,
     this.onAddChild,
+    this.onEdit,
   });
 
   @override
@@ -55,6 +57,11 @@ class _ExpandableTransactionCardState extends State<ExpandableTransactionCard> {
     final item = widget.transaction;
     final isIncome = item.type == 'income';
     final accentColor = isIncome ? AppTheme.income : AppTheme.cost;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfColor = Theme.of(context).colorScheme.surface;
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.04)
+        : Colors.black.withValues(alpha: 0.06);
 
     return Dismissible(
       key: Key(item.id.toString()),
@@ -72,13 +79,13 @@ class _ExpandableTransactionCardState extends State<ExpandableTransactionCard> {
         return await showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
-            backgroundColor: AppTheme.surface,
-            title: const Text('Confirmar eliminación'),
-            content: const Text('¿Estás seguro de que deseas eliminar este registro?'),
+            title: const Text('Confirmar eliminacion'),
+            content: const Text('Estas seguro de que deseas eliminar este registro?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Cancelar', style: TextStyle(color: AppTheme.textSecondary)),
+                child: Text('Cancelar',
+                    style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color)),
               ),
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(true),
@@ -94,19 +101,23 @@ class _ExpandableTransactionCardState extends State<ExpandableTransactionCard> {
           context.read<FinanceBloc>().add(
                 DeleteTransaction(id: item.id!, year: widget.year, month: widget.month),
               );
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Transaccion eliminada')),
+          );
         }
       },
       child: Container(
         decoration: BoxDecoration(
-          color: AppTheme.surface,
+          color: surfColor,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
+          border: Border.all(color: borderColor),
         ),
         child: Column(
           children: [
-            // Main card row
             InkWell(
-              onTap: item.hasChildren ? () => setState(() => _isExpanded = !_isExpanded) : null,
+              onTap: item.hasChildren
+                  ? () => setState(() => _isExpanded = !_isExpanded)
+                  : widget.onEdit,
               onLongPress: !isIncome ? widget.onAddChild : null,
               borderRadius: BorderRadius.circular(18),
               child: Padding(
@@ -137,19 +148,24 @@ class _ExpandableTransactionCardState extends State<ExpandableTransactionCard> {
                                 isIncome
                                     ? item.category
                                     : ExpenseSections.getCategoryDisplayName(item.category),
-                                style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                                style: TextStyle(
+                                    color: Theme.of(context).textTheme.labelLarge?.color,
+                                    fontSize: 12),
                               ),
                               const SizedBox(width: 8),
                               Container(
-                                width: 4,
-                                height: 4,
-                                decoration: const BoxDecoration(
-                                    color: Colors.white30, shape: BoxShape.circle),
+                                width: 4, height: 4,
+                                decoration: BoxDecoration(
+                                  color: isDark ? Colors.white30 : Colors.black26,
+                                  shape: BoxShape.circle,
+                                ),
                               ),
                               const SizedBox(width: 8),
                               Text(
                                 '${item.date.day}/${item.date.month}',
-                                style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                                style: TextStyle(
+                                    color: Theme.of(context).textTheme.labelLarge?.color,
+                                    fontSize: 12),
                               ),
                             ],
                           ),
@@ -170,7 +186,7 @@ class _ExpandableTransactionCardState extends State<ExpandableTransactionCard> {
                         if (item.hasChildren)
                           Icon(
                             _isExpanded ? Icons.expand_less : Icons.expand_more,
-                            color: AppTheme.textMuted,
+                            color: Theme.of(context).textTheme.labelLarge?.color,
                             size: 20,
                           ),
                       ],
@@ -179,14 +195,15 @@ class _ExpandableTransactionCardState extends State<ExpandableTransactionCard> {
                 ),
               ),
             ),
-            // Children (expandable)
             AnimatedSize(
               duration: const Duration(milliseconds: 250),
               child: _isExpanded && item.hasChildren
                   ? Column(
                       children: [
-                        const Divider(color: Colors.white12, height: 1, indent: 16, endIndent: 16),
-                        ...item.children.map((child) => _buildChildRow(child)),
+                        Divider(
+                            color: isDark ? Colors.white12 : Colors.black12,
+                            height: 1, indent: 16, endIndent: 16),
+                        ...item.children.map((child) => _buildChildRow(child, isDark)),
                         if (!isIncome)
                           InkWell(
                             onTap: widget.onAddChild,
@@ -212,7 +229,7 @@ class _ExpandableTransactionCardState extends State<ExpandableTransactionCard> {
     );
   }
 
-  Widget _buildChildRow(TransactionItem child) {
+  Widget _buildChildRow(TransactionItem child, bool isDark) {
     return Dismissible(
       key: Key('child_${child.id}'),
       direction: DismissDirection.endToStart,
@@ -222,11 +239,35 @@ class _ExpandableTransactionCardState extends State<ExpandableTransactionCard> {
         color: AppTheme.cost.withValues(alpha: 0.3),
         child: const Icon(Icons.delete_outline, color: Colors.white, size: 18),
       ),
+      confirmDismiss: (_) async {
+        return await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Confirmar eliminacion'),
+            content: Text('Eliminar "${child.description}"?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text('Cancelar',
+                    style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color)),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Eliminar',
+                    style: TextStyle(color: AppTheme.cost, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+      },
       onDismissed: (_) {
         if (child.id != null) {
           context.read<FinanceBloc>().add(
                 DeleteTransaction(id: child.id!, year: widget.year, month: widget.month),
               );
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Sub-item eliminado')),
+          );
         }
       },
       child: Padding(
@@ -234,10 +275,11 @@ class _ExpandableTransactionCardState extends State<ExpandableTransactionCard> {
         child: Row(
           children: [
             Container(
-              width: 6,
-              height: 6,
+              width: 6, height: 6,
               decoration: BoxDecoration(
-                color: AppTheme.textMuted.withValues(alpha: 0.5),
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.3)
+                    : Colors.black.withValues(alpha: 0.3),
                 shape: BoxShape.circle,
               ),
             ),
@@ -245,13 +287,13 @@ class _ExpandableTransactionCardState extends State<ExpandableTransactionCard> {
             Expanded(
               child: Text(
                 child.description,
-                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color, fontSize: 13),
               ),
             ),
             Text(
               CurrencyFormatter.format(child.amount),
-              style: const TextStyle(
-                color: AppTheme.textSecondary,
+              style: TextStyle(
+                color: Theme.of(context).textTheme.bodyMedium?.color,
                 fontWeight: FontWeight.w500,
                 fontSize: 13,
               ),

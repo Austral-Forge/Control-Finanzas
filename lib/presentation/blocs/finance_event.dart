@@ -17,6 +17,18 @@ class AddTransaction extends FinanceEvent {
   AddTransaction({required this.transaction});
 }
 
+class UpdateTransaction extends FinanceEvent {
+  final TransactionItem transaction;
+  final int year;
+  final int month;
+
+  UpdateTransaction({
+    required this.transaction,
+    required this.year,
+    required this.month,
+  });
+}
+
 class DeleteTransaction extends FinanceEvent {
   final int id;
   final int year;

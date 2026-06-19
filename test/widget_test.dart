@@ -21,6 +21,9 @@ class FakeFinanceRepository implements FinanceRepository {
   Future<void> addTransaction(TransactionItem item) async {}
 
   @override
+  Future<void> updateTransaction(TransactionItem item) async {}
+
+  @override
   Future<void> deleteTransaction(int id) async {}
 
   @override

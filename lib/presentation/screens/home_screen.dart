@@ -38,6 +38,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -51,12 +53,12 @@ class _HomeScreenState extends State<HomeScreen> {
               child: const Icon(Icons.wallet, color: AppTheme.primary, size: 24),
             ),
             const SizedBox(width: 12),
-            const Text('Mis Finanzas'),
+            const Text('Control Finanzas'),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings_outlined, color: AppTheme.textSecondary),
+            icon: Icon(Icons.settings_outlined, color: Theme.of(context).textTheme.bodyMedium?.color),
             onPressed: () {
               Navigator.push(
                 context,
@@ -65,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.refresh, color: AppTheme.textSecondary),
+            icon: Icon(Icons.refresh, color: Theme.of(context).textTheme.bodyMedium?.color),
             onPressed: () {
               context.read<FinanceBloc>().add(LoadFinanceSummaries());
             },
@@ -82,7 +84,7 @@ class _HomeScreenState extends State<HomeScreen> {
             if (state.summaries.isEmpty) {
               return const EmptyState();
             }
-            return _buildContent(state.summaries);
+            return _buildContent(state.summaries, isDark);
           } else if (state is FinanceError) {
             return ErrorState(
               message: state.message,
@@ -97,12 +99,12 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddTransactionDialog(context),
         icon: const Icon(Icons.add, size: 20),
-        label: const Text('Nueva Transacción'),
+        label: const Text('Nueva Transaccion'),
       ),
     );
   }
 
-  Widget _buildContent(List<MonthlySummary> summaries) {
+  Widget _buildContent(List<MonthlySummary> summaries, bool isDark) {
     final totalAhorro = summaries.fold<double>(
       0.0,
       (sum, item) => sum + item.balance,
@@ -128,8 +130,8 @@ class _HomeScreenState extends State<HomeScreen> {
               if (summaries.length > 1)
                 Text(
                   '${_currentPage + 1} / ${summaries.length}',
-                  style: const TextStyle(
-                    color: AppTheme.textMuted,
+                  style: TextStyle(
+                    color: Theme.of(context).textTheme.labelLarge?.color,
                     fontSize: 14,
                   ),
                 ),
@@ -137,7 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        if (summaries.length > 1) _buildPageIndicator(summaries.length),
+        if (summaries.length > 1) _buildPageIndicator(summaries.length, isDark),
         if (summaries.length > 1) const SizedBox(height: 8),
         Expanded(
           child: PageView.builder(
@@ -170,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildPageIndicator(int count) {
+  Widget _buildPageIndicator(int count, bool isDark) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(count, (index) {
@@ -181,7 +183,9 @@ class _HomeScreenState extends State<HomeScreen> {
           width: isActive ? 24 : 8,
           height: 8,
           decoration: BoxDecoration(
-            color: isActive ? AppTheme.primary : AppTheme.textMuted.withValues(alpha: 0.3),
+            color: isActive
+                ? AppTheme.primary
+                : (isDark ? Colors.white24 : Colors.black26),
             borderRadius: BorderRadius.circular(4),
           ),
         );
@@ -215,7 +219,7 @@ class _HomeScreenState extends State<HomeScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -240,7 +244,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Añadir Transacción',
+                            'Anadir Transaccion',
                             style: Theme.of(context).textTheme.headlineMedium,
                           ),
                           IconButton(
@@ -250,7 +254,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      // Type selector
                       Row(
                         children: [
                           Expanded(
@@ -297,7 +300,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 20),
-                      // Amount
                       TextFormField(
                         style: const TextStyle(fontSize: 18),
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -315,22 +317,20 @@ class _HomeScreenState extends State<HomeScreen> {
                         onSaved: (value) => amount = double.parse(value!),
                       ),
                       const SizedBox(height: 16),
-                      // Description
                       TextFormField(
                         decoration: const InputDecoration(
-                          labelText: 'Descripción / Concepto',
+                          labelText: 'Descripcion / Concepto',
                           prefixIcon: Icon(Icons.description_outlined),
                         ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
-                            return 'Ingresa una descripción';
+                            return 'Ingresa una descripcion';
                           }
                           return null;
                         },
                         onSaved: (value) => description = value!.trim(),
                       ),
                       const SizedBox(height: 16),
-                      // Category selector
                       if (type == 'income' && incomeSources.isNotEmpty)
                         DropdownButtonFormField<int>(
                           initialValue: incomeSourceId,
@@ -357,7 +357,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         DropdownButtonFormField<String>(
                           initialValue: category.isEmpty ? expenseCategories.first.key : category,
                           decoration: const InputDecoration(
-                            labelText: 'Categoría de Gasto',
+                            labelText: 'Categoria de Gasto',
                             prefixIcon: Icon(Icons.category_outlined),
                           ),
                           items: expenseCategories.map((cat) {
@@ -399,7 +399,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                       const SizedBox(height: 16),
-                      // Date picker
                       InkWell(
                         onTap: () async {
                           final pickedDate = await showDatePicker(
@@ -415,17 +414,21 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                           decoration: BoxDecoration(
-                            color: AppTheme.surface,
+                            color: Theme.of(context).colorScheme.surface,
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                            border: Border.all(
+                              color: Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.white.withValues(alpha: 0.08)
+                                  : Colors.black.withValues(alpha: 0.12),
+                            ),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.calendar_today_outlined,
-                                      size: 20, color: AppTheme.textSecondary),
+                                  Icon(Icons.calendar_today_outlined,
+                                      size: 20, color: Theme.of(context).textTheme.bodyMedium?.color),
                                   const SizedBox(width: 12),
                                   Text(
                                     'Fecha: ${date.day}/${date.month}/${date.year}',
@@ -441,7 +444,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      // Save button
                       SizedBox(
                         width: double.infinity,
                         height: 52,
@@ -466,15 +468,22 @@ class _HomeScreenState extends State<HomeScreen> {
                                 paymentMethodId: type == 'cost' ? paymentMethodId : null,
                               );
 
-                              context.read<FinanceBloc>().add(
+                              this.context.read<FinanceBloc>().add(
                                     AddTransaction(transaction: newTransaction),
                                   );
 
                               Navigator.pop(context);
+                              ScaffoldMessenger.of(this.context).showSnackBar(
+                                SnackBar(
+                                  content: Text(type == 'income'
+                                      ? 'Ingreso registrado'
+                                      : 'Egreso registrado'),
+                                ),
+                              );
                             }
                           },
                           child: const Text(
-                            'Guardar Transacción',
+                            'Guardar Transaccion',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,

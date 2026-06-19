@@ -6,7 +6,8 @@ import 'data/repositories/finance_repository_impl.dart';
 import 'presentation/blocs/finance_bloc.dart';
 import 'presentation/blocs/settings_bloc.dart';
 import 'presentation/blocs/settings_event.dart';
-import 'presentation/screens/login_screen.dart';
+import 'presentation/blocs/theme_cubit.dart';
+import 'presentation/screens/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,12 +34,19 @@ class MyApp extends StatelessWidget {
           create: (_) =>
               SettingsBloc(financeRepository: financeRepository)..add(LoadSettings()),
         ),
+        BlocProvider(create: (_) => ThemeCubit()),
       ],
-      child: MaterialApp(
-        title: 'Mis Finanzas',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.darkTheme,
-        home: const LoginScreen(),
+      child: BlocBuilder<ThemeCubit, ThemeMode>(
+        builder: (context, themeMode) {
+          return MaterialApp(
+            title: 'Control Finanzas Card',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: themeMode,
+            home: const HomeScreen(),
+          );
+        },
       ),
     );
   }

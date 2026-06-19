@@ -25,6 +25,11 @@ class FinanceRepositoryImpl implements FinanceRepository {
   }
 
   @override
+  Future<void> updateTransaction(TransactionItem item) async {
+    await _dbHelper.updateTransaction(item);
+  }
+
+  @override
   Future<void> deleteTransaction(int id) async {
     await _dbHelper.deleteTransaction(id);
   }

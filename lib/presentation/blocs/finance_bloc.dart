@@ -10,6 +10,7 @@ class FinanceBloc extends Bloc<FinanceEvent, FinanceState> {
     on<LoadFinanceSummaries>(_onLoadFinanceSummaries);
     on<LoadMonthDetails>(_onLoadMonthDetails);
     on<AddTransaction>(_onAddTransaction);
+    on<UpdateTransaction>(_onUpdateTransaction);
     on<DeleteTransaction>(_onDeleteTransaction);
     on<AddChildTransaction>(_onAddChildTransaction);
   }
@@ -79,6 +80,29 @@ class FinanceBloc extends Bloc<FinanceEvent, FinanceState> {
         } else {
           emit(currentState.copyWith(summaries: summaries));
         }
+      } catch (e) {
+        emit(FinanceError(message: e.toString()));
+      }
+    }
+  }
+
+  Future<void> _onUpdateTransaction(
+    UpdateTransaction event,
+    Emitter<FinanceState> emit,
+  ) async {
+    final currentState = state;
+    if (currentState is FinanceLoaded) {
+      try {
+        await financeRepository.updateTransaction(event.transaction);
+        final summaries = await financeRepository.getMonthlySummaries();
+        final transactions = await financeRepository.getTransactionsForMonth(
+          event.year,
+          event.month,
+        );
+        emit(currentState.copyWith(
+          summaries: summaries,
+          selectedMonthTransactions: transactions,
+        ));
       } catch (e) {
         emit(FinanceError(message: e.toString()));
       }

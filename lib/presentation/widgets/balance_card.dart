@@ -37,7 +37,6 @@ class BalanceCard extends StatelessWidget {
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
               letterSpacing: 1.5,
               fontWeight: FontWeight.w600,
-              color: AppTheme.textSecondary,
             ),
           ),
           const SizedBox(height: 12),
@@ -54,7 +53,7 @@ class BalanceCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                isDeficit ? 'Déficit acumulado' : 'Ahorro Neto',
+                isDeficit ? 'Deficit acumulado' : 'Ahorro Neto',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: isDeficit
                       ? AppTheme.cost.withValues(alpha: 0.7)
