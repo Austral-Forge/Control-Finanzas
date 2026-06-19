@@ -9,8 +9,11 @@ import '../../core/constants/transaction_types.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/context_theme_x.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../blocs/settings_bloc.dart';
+import '../blocs/settings_state.dart';
 import '../../data/models/monthly_projection.dart';
 import '../../data/models/monthly_summary.dart';
+import '../../data/models/projected_month.dart';
 import '../widgets/index.dart';
 import 'detail_screen.dart';
 import 'settings_screen.dart';
@@ -106,16 +109,28 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildContent(List<MonthlySummary> summaries) {
-    // Los resúmenes llegan en orden descendente; se invierten para que los
-    // meses antiguos queden a la izquierda del carrusel.
     final chronological = summaries.reversed.toList();
     final projections = MonthlyProjection.fromChronological(chronological);
     final totalSavings = summaries.fold<double>(0.0, (sum, s) => sum + s.balance);
 
-    _scheduleInitialPage(projections.length);
+    final settingsState = context.watch<SettingsBloc>().state;
+    final installments = settingsState is SettingsLoaded
+        ? settingsState.installments
+        : const <dynamic>[];
 
-    final currentIndex = _page.round().clamp(0, projections.length - 1);
-    final current = projections[currentIndex];
+    final lastSummary = chronological.last;
+    final projected = ProjectedMonth.next(
+      lastYear: lastSummary.year,
+      lastMonth: lastSummary.month,
+      carriedBalance: totalSavings,
+      installments: installments.cast(),
+    );
+
+    final totalCards = projections.length + 1;
+    _scheduleInitialPage(totalCards);
+
+    final currentIndex = _page.round().clamp(0, totalCards - 1);
+    final isProjectedSelected = currentIndex == projections.length;
 
     return Column(
       children: [
@@ -124,24 +139,30 @@ class _HomeScreenState extends State<HomeScreen> {
           child: BalanceCard(totalBalance: totalSavings),
         ),
         const SizedBox(height: 20),
-        _buildCarouselHeader(currentIndex, projections.length),
+        _buildCarouselHeader(currentIndex, totalCards),
         const SizedBox(height: 12),
         SizedBox(
           height: 280,
           child: PageView.builder(
             controller: _pageController,
-            itemCount: projections.length,
-            itemBuilder: (context, index) =>
-                _build3DCard(index, projections[index]),
+            itemCount: totalCards,
+            itemBuilder: (context, index) {
+              if (index < projections.length) {
+                return _build3DCard(index, projections[index]);
+              }
+              return _build3DProjectedCard(index, projected);
+            },
           ),
         ),
         const SizedBox(height: 8),
-        _buildPageDots(projections.length, currentIndex),
+        _buildPageDots(totalCards, currentIndex),
         const SizedBox(height: 16),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 90),
-            child: _MonthChart(projection: current),
+            child: isProjectedSelected
+                ? _ProjectedMonthChart(projected: projected)
+                : _MonthChart(projection: projections[currentIndex]),
           ),
         ),
       ],
@@ -204,6 +225,27 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Opacity(
         opacity: opacity.toDouble(),
         child: _MonthCarouselCard(projection: projection),
+      ),
+    );
+  }
+
+  Widget _build3DProjectedCard(int index, ProjectedMonth projected) {
+    final distance = index - _page;
+    final rotationY = distance * 0.4;
+    final scale = 1 - (distance.abs() * 0.15).clamp(0.0, 0.3);
+    final opacity = (1 - (distance.abs() * 0.3)).clamp(0.4, 1.0);
+
+    final transform = Matrix4.identity()
+      ..setEntry(3, 2, 0.002)
+      ..rotateY(rotationY);
+    final scaled = transform * Matrix4.diagonal3Values(scale, scale, 1.0);
+
+    return Transform(
+      alignment: Alignment.center,
+      transform: scaled,
+      child: Opacity(
+        opacity: opacity.toDouble(),
+        child: _ProjectedCarouselCard(projected: projected),
       ),
     );
   }
@@ -576,6 +618,249 @@ class _ChartLegend extends StatelessWidget {
         Text(label,
             style: TextStyle(color: context.mutedTextColor, fontSize: 11)),
       ],
+    );
+  }
+}
+
+/// Tarjeta del mes proyectado (último slot del carrusel).
+class _ProjectedCarouselCard extends StatelessWidget {
+  final ProjectedMonth projected;
+
+  const _ProjectedCarouselCard({required this.projected});
+
+  @override
+  Widget build(BuildContext context) {
+    final monthName = CurrencyFormatter.getMonthName(projected.month);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: AppTheme.primary.withValues(alpha: 0.4),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primary.withValues(alpha: context.isDark ? 0.12 : 0.06),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('$monthName ${projected.year}',
+                  style: context.textTheme.titleLarge),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text('Proyectado',
+                    style: TextStyle(
+                        color: AppTheme.primary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _CardRow(
+              label: 'Saldo arrastrado',
+              value: projected.carriedBalance,
+              color: projected.carriedBalance >= 0
+                  ? AppTheme.income
+                  : AppTheme.cost),
+          if (projected.hasInstallments) ...[
+            const SizedBox(height: 4),
+            ...projected.dueInstallments.map((inst) => Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: _CardRow(
+                      label: '- ${inst.description}',
+                      value: inst.dueAmountForMonth(
+                          projected.year, projected.month),
+                      color: AppTheme.cost),
+                )),
+            const SizedBox(height: 2),
+            _CardRow(
+                label: 'Total cuotas',
+                value: projected.projectedExpenses,
+                color: AppTheme.cost),
+          ],
+          if (!projected.hasInstallments) ...[
+            const SizedBox(height: 4),
+            _CardRow(
+                label: 'Cuotas del mes', value: 0, color: AppTheme.cost),
+          ],
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Divider(color: context.dividerColor, height: 1),
+          ),
+          _CardTotalRow(
+            label: 'Balance Proyectado',
+            value: projected.projectedBalance,
+            color: projected.isDeficit ? AppTheme.cost : AppTheme.income,
+          ),
+          const Spacer(),
+          Center(
+            child: Text(
+              projected.hasInstallments
+                  ? '${projected.dueInstallments.length} cuota(s) pendiente(s)'
+                  : 'Sin cuotas comprometidas',
+              style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Gráfico de barras para el mes proyectado.
+class _ProjectedMonthChart extends StatelessWidget {
+  final ProjectedMonth projected;
+
+  const _ProjectedMonthChart({required this.projected});
+
+  @override
+  Widget build(BuildContext context) {
+    final monthName = CurrencyFormatter.getMonthName(projected.month);
+    final carried = projected.carriedBalance;
+    final expenses = projected.projectedExpenses;
+    final balance = projected.projectedBalance;
+
+    final maxValue = [carried.abs(), expenses, balance.abs()]
+        .reduce(math.max);
+    final ceiling = maxValue > 0 ? maxValue * 1.2 : 1000.0;
+
+    final labels = ['Saldo\nAnterior', 'Cuotas\nProyect.', 'Balance\nProyect.'];
+    final tooltipLabels = ['Saldo Anterior', 'Cuotas Proyectadas', 'Balance Proyectado'];
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: context.cardBorderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Proyeccion $monthName ${projected.year}',
+              style: context.textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text('Saldo arrastrado vs Cuotas comprometidas',
+              style: TextStyle(color: context.mutedTextColor, fontSize: 12)),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 200,
+            child: BarChart(
+              BarChartData(
+                alignment: BarChartAlignment.spaceAround,
+                maxY: ceiling,
+                barTouchData: BarTouchData(
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) =>
+                        BarTooltipItem(
+                      '${tooltipLabels[groupIndex]}\n${CurrencyFormatter.format(rod.toY)}',
+                      const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12),
+                    ),
+                  ),
+                ),
+                titlesData: FlTitlesData(
+                  show: true,
+                  leftTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (value, meta) {
+                        final idx = value.toInt();
+                        if (idx < 0 || idx >= labels.length) {
+                          return const SizedBox();
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(labels[idx],
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: context.mutedTextColor)),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                gridData: const FlGridData(show: false),
+                barGroups: [
+                  BarChartGroupData(x: 0, barRods: [
+                    BarChartRodData(
+                      toY: carried.abs(),
+                      color: carried >= 0 ? AppTheme.savings : AppTheme.cost,
+                      width: 32,
+                      borderRadius:
+                          const BorderRadius.vertical(top: Radius.circular(6)),
+                    ),
+                  ]),
+                  BarChartGroupData(x: 1, barRods: [
+                    BarChartRodData(
+                      toY: expenses,
+                      color: AppTheme.cost,
+                      width: 32,
+                      borderRadius:
+                          const BorderRadius.vertical(top: Radius.circular(6)),
+                    ),
+                  ]),
+                  BarChartGroupData(x: 2, barRods: [
+                    BarChartRodData(
+                      toY: balance.abs(),
+                      color: balance >= 0
+                          ? AppTheme.primary
+                          : AppTheme.cost.withValues(alpha: 0.6),
+                      width: 32,
+                      borderRadius:
+                          const BorderRadius.vertical(top: Radius.circular(6)),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _ChartLegend(
+                label: 'Saldo Arrastrado',
+                value: CurrencyFormatter.format(carried),
+                color: carried >= 0 ? AppTheme.savings : AppTheme.cost,
+              ),
+              _ChartLegend(
+                label: 'Balance Proyect.',
+                value: CurrencyFormatter.format(balance),
+                color: balance >= 0 ? AppTheme.primary : AppTheme.cost,
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
