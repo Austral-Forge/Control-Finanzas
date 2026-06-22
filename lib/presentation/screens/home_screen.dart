@@ -12,7 +12,6 @@ import '../../core/utils/currency_formatter.dart';
 import '../blocs/settings_bloc.dart';
 import '../blocs/settings_state.dart';
 import '../../data/models/monthly_projection.dart';
-import '../../data/models/monthly_summary.dart';
 import '../../data/models/projected_month.dart';
 import '../widgets/index.dart';
 import 'detail_screen.dart';
@@ -29,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final PageController _pageController;
   double _page = 0.0;
   bool _initialPageSet = false;
+  bool _savingsDialogShown = false;
 
   @override
   void initState() {
@@ -58,7 +58,8 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           } else if (state is FinanceLoaded) {
             if (state.summaries.isEmpty) return const EmptyState();
-            return _buildContent(state.summaries);
+            _showSavingsDialogIfNeeded(state);
+            return _buildContent(state);
           } else if (state is FinanceError) {
             return ErrorState(
               message: state.message,
@@ -108,10 +109,40 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildContent(List<MonthlySummary> summaries) {
+  void _showSavingsDialogIfNeeded(FinanceLoaded state) {
+    if (_savingsDialogShown || !state.hasPendingSavingsConfirmation) return;
+    _savingsDialogShown = true;
+    final totalSavings =
+        state.summaries.fold<double>(0.0, (sum, s) => sum + s.balance);
+    final now = DateTime.now();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      SavingsConfirmationSheet.show(
+        context,
+        calculatedSavings: totalSavings,
+        year: now.year,
+        month: now.month,
+        onConfirm: (amount) {
+          context.read<FinanceBloc>().add(ConfirmSavings(
+                year: now.year,
+                month: now.month,
+                originalAmount: totalSavings,
+                confirmedAmount: amount,
+              ));
+        },
+      );
+    });
+  }
+
+  Widget _buildContent(FinanceLoaded state) {
+    final summaries = state.summaries;
     final chronological = summaries.reversed.toList();
-    final projections = MonthlyProjection.fromChronological(chronological);
-    final totalSavings = summaries.fold<double>(0.0, (sum, s) => sum + s.balance);
+    final projections = MonthlyProjection.fromChronological(
+      chronological,
+      confirmations: state.savingsConfirmations,
+    );
+    final totalSavings =
+        summaries.fold<double>(0.0, (sum, s) => sum + s.balance);
 
     final settingsState = context.watch<SettingsBloc>().state;
     final installments = settingsState is SettingsLoaded
@@ -119,11 +150,17 @@ class _HomeScreenState extends State<HomeScreen> {
         : const <dynamic>[];
 
     final lastSummary = chronological.last;
+    final now = DateTime.now();
+    final currentKey = '${now.year}-${now.month}';
+    final savingsConfirmed =
+        state.savingsConfirmations.containsKey(currentKey);
+
     final projected = ProjectedMonth.next(
       lastYear: lastSummary.year,
       lastMonth: lastSummary.month,
       carriedBalance: totalSavings,
       installments: installments.cast(),
+      savingsConfirmed: savingsConfirmed,
     );
 
     final totalCards = projections.length + 1;
@@ -662,14 +699,23 @@ class _ProjectedCarouselCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.12),
+                  color: projected.savingsConfirmed
+                      ? AppTheme.primary.withValues(alpha: 0.12)
+                      : AppTheme.cost.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Text('Proyectado',
-                    style: TextStyle(
-                        color: AppTheme.primary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 11)),
+                child: Text(
+                  projected.savingsConfirmed
+                      ? 'Proyectado'
+                      : 'Pendiente confirmar',
+                  style: TextStyle(
+                    color: projected.savingsConfirmed
+                        ? AppTheme.primary
+                        : AppTheme.cost,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                  ),
+                ),
               ),
             ],
           ),

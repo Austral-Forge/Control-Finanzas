@@ -6,6 +6,7 @@ import '../models/income_source.dart';
 import '../models/payment_method.dart';
 import '../models/expense_category.dart';
 import '../models/installment.dart';
+import '../models/savings_confirmation.dart';
 
 class FinanceRepositoryImpl implements FinanceRepository {
   final DbHelper _dbHelper = DbHelper.instance;
@@ -108,5 +109,20 @@ class FinanceRepositoryImpl implements FinanceRepository {
   @override
   Future<void> deleteInstallment(int id) async {
     await _dbHelper.deleteInstallment(id);
+  }
+
+  @override
+  Future<SavingsConfirmation?> getSavingsConfirmation(int year, int month) {
+    return _dbHelper.getSavingsConfirmation(year, month);
+  }
+
+  @override
+  Future<void> saveSavingsConfirmation(SavingsConfirmation confirmation) async {
+    await _dbHelper.insertOrUpdateSavingsConfirmation(confirmation);
+  }
+
+  @override
+  Future<List<SavingsConfirmation>> getAllSavingsConfirmations() {
+    return _dbHelper.getAllSavingsConfirmations();
   }
 }

@@ -4,6 +4,7 @@ import '../../data/models/income_source.dart';
 import '../../data/models/payment_method.dart';
 import '../../data/models/expense_category.dart';
 import '../../data/models/installment.dart';
+import '../../data/models/savings_confirmation.dart';
 
 abstract class FinanceRepository {
   Future<List<MonthlySummary>> getMonthlySummaries();
@@ -30,4 +31,8 @@ abstract class FinanceRepository {
   Future<void> addInstallment(Installment installment);
   Future<void> updateInstallment(Installment installment);
   Future<void> deleteInstallment(int id);
+
+  Future<SavingsConfirmation?> getSavingsConfirmation(int year, int month);
+  Future<void> saveSavingsConfirmation(SavingsConfirmation confirmation);
+  Future<List<SavingsConfirmation>> getAllSavingsConfirmations();
 }

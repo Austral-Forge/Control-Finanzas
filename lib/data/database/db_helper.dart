@@ -7,10 +7,13 @@ import '../models/income_source.dart';
 import '../models/payment_method.dart';
 import '../models/expense_category.dart';
 import '../models/installment.dart';
+import '../models/savings_confirmation.dart';
 
 class DbHelper {
   static final DbHelper instance = DbHelper._init();
   static Database? _database;
+
+  static bool skipSampleSeeding = false;
 
   // Web in-memory storage
   static List<Map<String, dynamic>>? _webDb;
@@ -18,6 +21,7 @@ class DbHelper {
   static List<Map<String, dynamic>>? _webPaymentMethods;
   static List<Map<String, dynamic>>? _webExpenseCategories;
   static List<Map<String, dynamic>>? _webInstallments;
+  static List<Map<String, dynamic>>? _webSavingsConfirmations;
 
   DbHelper._init();
 
@@ -36,7 +40,7 @@ class DbHelper {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -86,9 +90,13 @@ class DbHelper {
     ''');
 
     await db.execute(_createInstallmentsTableSql);
+    await db.execute(_createSavingsConfirmationsTableSql);
 
-    await _seedExpenseCategories(db);
-    await _seedDefaults(db);
+    if (!skipSampleSeeding) {
+      await _seedExpenseCategories(db);
+      await _seedDefaultSources(db);
+      await _seedSampleTransactions(db);
+    }
   }
 
   static const String _createInstallmentsTableSql = '''
@@ -103,6 +111,18 @@ class DbHelper {
       start_year INTEGER NOT NULL,
       start_month INTEGER NOT NULL,
       FOREIGN KEY (payment_method_id) REFERENCES payment_methods(id)
+    )
+  ''';
+
+  static const String _createSavingsConfirmationsTableSql = '''
+    CREATE TABLE savings_confirmations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      original_amount REAL NOT NULL,
+      confirmed_amount REAL NOT NULL,
+      confirmed_at TEXT NOT NULL,
+      UNIQUE(year, month)
     )
   ''';
 
@@ -180,6 +200,10 @@ class DbHelper {
     if (oldVersion < 3) {
       await db.execute(_createInstallmentsTableSql);
     }
+
+    if (oldVersion < 4) {
+      await db.execute(_createSavingsConfirmationsTableSql);
+    }
   }
 
   Future<void> _seedExpenseCategories(Database db) async {
@@ -205,14 +229,16 @@ class DbHelper {
     }
   }
 
-  Future<void> _seedDefaults(Database db) async {
+  Future<void> _seedDefaultSources(Database db) async {
     await db.insert('income_sources', {'name': 'Sueldo'},
         conflictAlgorithm: ConflictAlgorithm.ignore);
     await db.insert('income_sources', {'name': 'Ventas'},
         conflictAlgorithm: ConflictAlgorithm.ignore);
     await db.insert('payment_methods', {'name': 'Efectivo'},
         conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
 
+  Future<void> _seedSampleTransactions(Database db) async {
     final now = DateTime.now();
     final lastMonth = DateTime(now.year, now.month - 1);
 
@@ -277,36 +303,40 @@ class DbHelper {
     ];
 
     _webInstallments = [];
+    _webSavingsConfirmations = [];
 
     _webDb = [];
-    final now = DateTime.now();
-    final lastMonth = DateTime(now.year, now.month - 1);
 
-    String isoDate(DateTime date, int day) {
-      return DateTime(date.year, date.month, day, 12, 0).toIso8601String();
-    }
+    if (!skipSampleSeeding) {
+      final now = DateTime.now();
+      final lastMonth = DateTime(now.year, now.month - 1);
 
-    final initialData = [
-      {'type': 'income', 'category': 'sueldo', 'amount': 2500.0, 'description': 'Sueldo mensual', 'date': isoDate(lastMonth, 5), 'income_source_id': 1},
-      {'type': 'income', 'category': 'ventas', 'amount': 450.0, 'description': 'Venta de artículos usados', 'date': isoDate(lastMonth, 15), 'income_source_id': 2},
-      {'type': 'income', 'category': 'pagos_tercero', 'amount': 150.0, 'description': 'Reembolso de cena', 'date': isoDate(lastMonth, 20)},
-      {'type': 'cost', 'category': 'tarjeta_credito', 'amount': 600.0, 'description': 'Tarjeta de Crédito Visa', 'date': isoDate(lastMonth, 10)},
-      {'type': 'cost', 'category': 'prestamo', 'amount': 300.0, 'description': 'Cuota crédito de consumo', 'date': isoDate(lastMonth, 12)},
-      {'type': 'cost', 'category': 'arriendo_dividendo', 'amount': 250.0, 'description': 'Luz, agua e internet', 'date': isoDate(lastMonth, 5)},
-      {'type': 'cost', 'category': 'compras', 'amount': 400.0, 'description': 'Supermercado mensual', 'date': isoDate(lastMonth, 8)},
-      {'type': 'income', 'category': 'sueldo', 'amount': 2500.0, 'description': 'Sueldo mensual', 'date': isoDate(now, 5), 'income_source_id': 1},
-      {'type': 'cost', 'category': 'arriendo_dividendo', 'amount': 260.0, 'description': 'Luz, agua y gas', 'date': isoDate(now, 5)},
-      {'type': 'cost', 'category': 'compras', 'amount': 180.0, 'description': 'Compra supermercado semana 1', 'date': isoDate(now, 7)},
-    ];
+      String isoDate(DateTime date, int day) {
+        return DateTime(date.year, date.month, day, 12, 0).toIso8601String();
+      }
 
-    int idCounter = 1;
-    for (var data in initialData) {
-      final map = Map<String, dynamic>.from(data);
-      map['id'] = idCounter++;
-      map['parent_id'] = null;
-      map.putIfAbsent('income_source_id', () => null);
-      map.putIfAbsent('payment_method_id', () => null);
-      _webDb!.add(map);
+      final initialData = [
+        {'type': 'income', 'category': 'sueldo', 'amount': 2500.0, 'description': 'Sueldo mensual', 'date': isoDate(lastMonth, 5), 'income_source_id': 1},
+        {'type': 'income', 'category': 'ventas', 'amount': 450.0, 'description': 'Venta de artículos usados', 'date': isoDate(lastMonth, 15), 'income_source_id': 2},
+        {'type': 'income', 'category': 'pagos_tercero', 'amount': 150.0, 'description': 'Reembolso de cena', 'date': isoDate(lastMonth, 20)},
+        {'type': 'cost', 'category': 'tarjeta_credito', 'amount': 600.0, 'description': 'Tarjeta de Crédito Visa', 'date': isoDate(lastMonth, 10)},
+        {'type': 'cost', 'category': 'prestamo', 'amount': 300.0, 'description': 'Cuota crédito de consumo', 'date': isoDate(lastMonth, 12)},
+        {'type': 'cost', 'category': 'arriendo_dividendo', 'amount': 250.0, 'description': 'Luz, agua e internet', 'date': isoDate(lastMonth, 5)},
+        {'type': 'cost', 'category': 'compras', 'amount': 400.0, 'description': 'Supermercado mensual', 'date': isoDate(lastMonth, 8)},
+        {'type': 'income', 'category': 'sueldo', 'amount': 2500.0, 'description': 'Sueldo mensual', 'date': isoDate(now, 5), 'income_source_id': 1},
+        {'type': 'cost', 'category': 'arriendo_dividendo', 'amount': 260.0, 'description': 'Luz, agua y gas', 'date': isoDate(now, 5)},
+        {'type': 'cost', 'category': 'compras', 'amount': 180.0, 'description': 'Compra supermercado semana 1', 'date': isoDate(now, 7)},
+      ];
+
+      int idCounter = 1;
+      for (var data in initialData) {
+        final map = Map<String, dynamic>.from(data);
+        map['id'] = idCounter++;
+        map['parent_id'] = null;
+        map.putIfAbsent('income_source_id', () => null);
+        map.putIfAbsent('payment_method_id', () => null);
+        _webDb!.add(map);
+      }
     }
   }
 
@@ -657,6 +687,63 @@ class DbHelper {
   int _nextWebId(List<Map<String, dynamic>> rows) {
     if (rows.isEmpty) return 1;
     return rows.map((e) => e['id'] as int).reduce((a, b) => a > b ? a : b) + 1;
+  }
+
+  // --- Savings Confirmations CRUD ---
+
+  Future<SavingsConfirmation?> getSavingsConfirmation(int year, int month) async {
+    if (kIsWeb) {
+      _initWebDb();
+      final match = _webSavingsConfirmations!
+          .where((e) => e['year'] == year && e['month'] == month)
+          .toList();
+      if (match.isEmpty) return null;
+      return SavingsConfirmation.fromMap(match.first);
+    } else {
+      final db = await instance.database;
+      final rows = await db.query('savings_confirmations',
+          where: 'year = ? AND month = ?', whereArgs: [year, month], limit: 1);
+      if (rows.isEmpty) return null;
+      return SavingsConfirmation.fromMap(rows.first);
+    }
+  }
+
+  Future<List<SavingsConfirmation>> getAllSavingsConfirmations() async {
+    if (kIsWeb) {
+      _initWebDb();
+      return _webSavingsConfirmations!
+          .map((m) => SavingsConfirmation.fromMap(m))
+          .toList();
+    } else {
+      final db = await instance.database;
+      final result = await db.query('savings_confirmations',
+          orderBy: 'year ASC, month ASC');
+      return result.map((m) => SavingsConfirmation.fromMap(m)).toList();
+    }
+  }
+
+  Future<int> insertOrUpdateSavingsConfirmation(
+      SavingsConfirmation confirmation) async {
+    if (kIsWeb) {
+      _initWebDb();
+      final index = _webSavingsConfirmations!.indexWhere(
+          (e) => e['year'] == confirmation.year && e['month'] == confirmation.month);
+      final map = confirmation.toMap();
+      if (index != -1) {
+        map['id'] = _webSavingsConfirmations![index]['id'];
+        _webSavingsConfirmations![index] = map;
+        return map['id'] as int;
+      } else {
+        final newId = _nextWebId(_webSavingsConfirmations!);
+        map['id'] = newId;
+        _webSavingsConfirmations!.add(map);
+        return newId;
+      }
+    } else {
+      final db = await instance.database;
+      return await db.insert('savings_confirmations', confirmation.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    }
   }
 
   // --- Close ---

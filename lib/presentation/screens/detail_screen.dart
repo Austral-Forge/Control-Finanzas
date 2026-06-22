@@ -12,7 +12,9 @@ import '../../core/theme/context_theme_x.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/constants/expense_sections.dart';
 import '../../core/constants/expense_category_lookup.dart';
+import '../../core/utils/financial_analysis.dart';
 import '../../data/models/transaction_item.dart';
+import '../widgets/analysis_section.dart';
 import '../widgets/expandable_transaction_card.dart';
 import '../widgets/transaction_form_sheet.dart';
 
@@ -72,7 +74,7 @@ class _DetailScreenState extends State<DetailScreen> {
                 child: CircularProgressIndicator(color: AppTheme.primary),
               );
             }
-            return _buildSectionsView(state.selectedMonthTransactions!);
+            return _buildSectionsView(state);
           } else if (state is FinanceError) {
             return Center(child: Text('Error: ${state.message}'));
           }
@@ -112,7 +114,8 @@ class _DetailScreenState extends State<DetailScreen> {
   double _sum(List<TransactionItem> items) =>
       items.fold(0.0, (sum, t) => sum + t.amount);
 
-  Widget _buildSectionsView(List<TransactionItem> transactions) {
+  Widget _buildSectionsView(FinanceLoaded state) {
+    final transactions = state.selectedMonthTransactions!;
     final incomes =
         transactions.where((t) => TransactionType.isIncome(t.type)).toList();
     final costs =
@@ -134,6 +137,25 @@ class _DetailScreenState extends State<DetailScreen> {
     final extraordinarios =
         _costsBySection(filteredCosts, ExpenseSection.extraordinario);
 
+    final previousTransactions = state.previousMonthTransactions ?? const [];
+    final prevIncomes = previousTransactions
+        .where((t) => TransactionType.isIncome(t.type))
+        .toList();
+    final prevCosts = previousTransactions
+        .where((t) => TransactionType.isCost(t.type))
+        .toList();
+
+    final analysis = FinancialAnalysis(
+      currentTransactions: transactions,
+      previousTransactions: previousTransactions,
+      currentIncome: totalIncome,
+      currentCost: totalCost,
+      previousIncome: _sum(prevIncomes),
+      previousCost: _sum(prevCosts),
+      categoryDisplayNames: _categoryLookup.displayNameMap,
+      categorySections: _categoryLookup.sectionMap,
+    );
+
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
@@ -143,6 +165,7 @@ class _DetailScreenState extends State<DetailScreen> {
           _buildHeaderSummary(totalIncome, totalCost),
           const SizedBox(height: 16),
           _buildKpiCharts(costs, totalIncome, totalCost),
+          AnalysisSection(analysis: analysis),
           const SizedBox(height: 16),
           _buildFilterBar(transactions),
           const SizedBox(height: 16),

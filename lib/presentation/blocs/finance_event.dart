@@ -52,3 +52,19 @@ class AddChildTransaction extends FinanceEvent {
     required this.month,
   });
 }
+
+class CheckPendingSavingsConfirmation extends FinanceEvent {}
+
+class ConfirmSavings extends FinanceEvent {
+  final int year;
+  final int month;
+  final double originalAmount;
+  final double confirmedAmount;
+
+  ConfirmSavings({
+    required this.year,
+    required this.month,
+    required this.originalAmount,
+    required this.confirmedAmount,
+  });
+}

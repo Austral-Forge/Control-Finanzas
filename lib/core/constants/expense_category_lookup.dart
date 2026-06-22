@@ -20,4 +20,12 @@ class ExpenseCategoryLookup {
 
   /// Nombre legible de una categoría; la propia key como fallback.
   String displayNameOf(String key) => _byKey[key]?.displayName ?? key;
+
+  /// Mapa key → displayName para todas las categorías conocidas.
+  Map<String, String> get displayNameMap =>
+      _byKey.map((key, cat) => MapEntry(key, cat.displayName));
+
+  /// Mapa key → section (string) para todas las categorías conocidas.
+  Map<String, String> get sectionMap =>
+      _byKey.map((key, cat) => MapEntry(key, cat.section));
 }

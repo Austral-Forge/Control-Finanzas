@@ -15,11 +15,14 @@ class ProjectedMonth {
   /// Cuotas con un pago pendiente en este mes.
   final List<Installment> dueInstallments;
 
+  final bool savingsConfirmed;
+
   const ProjectedMonth({
     required this.year,
     required this.month,
     required this.carriedBalance,
     required this.dueInstallments,
+    this.savingsConfirmed = false,
   });
 
   /// Suma de las cuotas que vencen este mes.
@@ -42,6 +45,7 @@ class ProjectedMonth {
     required int lastMonth,
     required double carriedBalance,
     required List<Installment> installments,
+    bool savingsConfirmed = false,
   }) {
     final nextMonth = lastMonth == 12 ? 1 : lastMonth + 1;
     final nextYear = lastMonth == 12 ? lastYear + 1 : lastYear;
@@ -53,6 +57,7 @@ class ProjectedMonth {
       month: nextMonth,
       carriedBalance: carriedBalance,
       dueInstallments: due,
+      savingsConfirmed: savingsConfirmed,
     );
   }
 }

@@ -1,45 +1,42 @@
 import 'monthly_summary.dart';
+import 'savings_confirmation.dart';
 
-/// Proyección financiera de un mes que incorpora el ahorro acumulado de los
-/// meses anteriores como parte del ingreso disponible.
 class MonthlyProjection {
   final MonthlySummary summary;
-
-  /// Ahorro neto acumulado de todos los meses anteriores a este.
   final double previousSavings;
+  final bool savingsConfirmed;
 
   const MonthlyProjection({
     required this.summary,
     required this.previousSavings,
+    this.savingsConfirmed = false,
   });
 
-  /// El ahorro anterior solo suma cuando es positivo (un déficit previo no
-  /// incrementa el ingreso disponible del mes actual).
   double get carriedSavings => previousSavings > 0 ? previousSavings : 0;
 
-  /// Ingreso del mes más el ahorro arrastrado de meses anteriores.
   double get effectiveIncome => summary.totalIncome + carriedSavings;
 
-  /// Cuánto podría ahorrarse este mes considerando el ingreso efectivo.
   double get savingsPotential => effectiveIncome - summary.totalCost;
 
-  /// Tasa de ahorro del mes respecto a su ingreso propio (0..1).
   double get savingsRate =>
       summary.totalIncome > 0 ? summary.balance / summary.totalIncome : 0;
 
   bool get hasCarriedSavings => carriedSavings > 0;
 
-  /// Construye las proyecciones de una lista de resúmenes en orden cronológico
-  /// (del más antiguo al más reciente), acumulando el ahorro previo de cada mes.
   static List<MonthlyProjection> fromChronological(
-    List<MonthlySummary> chronological,
-  ) {
+    List<MonthlySummary> chronological, {
+    Map<String, SavingsConfirmation> confirmations = const {},
+  }) {
     final projections = <MonthlyProjection>[];
     var accumulated = 0.0;
     for (final summary in chronological) {
+      final key = '${summary.year}-${summary.month}';
+      final confirmation = confirmations[key];
       projections.add(MonthlyProjection(
         summary: summary,
-        previousSavings: accumulated,
+        previousSavings:
+            confirmation != null ? confirmation.confirmedAmount : accumulated,
+        savingsConfirmed: confirmation != null,
       ));
       accumulated += summary.balance;
     }
