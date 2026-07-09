@@ -710,6 +710,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         color: badge.$2)),
               ),
             IconButton(
+              icon: Icon(Icons.calendar_month_outlined,
+                  size: 18, color: context.secondaryTextColor),
+              tooltip: 'Ver calendario de cuotas',
+              onPressed: () => _showScheduleSheet(inst),
+              visualDensity: VisualDensity.compact,
+            ),
+            IconButton(
               icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.cost),
               onPressed: () => _confirmDeleteInstallment(inst),
               visualDensity: VisualDensity.compact,
@@ -741,6 +748,126 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   fontSize: 12,
                   fontWeight: FontWeight.w500)),
         ]),
+      ),
+    );
+  }
+
+  /// Calendario completo de la cuota: todas las mensualidades desde la fecha
+  /// registrada, marcando cuales ya se pagaron y cuales quedan proyectadas.
+  void _showScheduleSheet(Installment inst) {
+    final schedule = inst.schedule();
+    final incoming = inst.isIncoming;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.theme.scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetCtx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (sheetCtx, scrollController) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(inst.description,
+                            style: context.textTheme.headlineMedium),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(sheetCtx),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    incoming
+                        ? 'Cuotas que te deben, mes a mes'
+                        : 'Cuotas que pagas, mes a mes',
+                    style: TextStyle(
+                        color: context.mutedTextColor, fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: ListView.separated(
+                      controller: scrollController,
+                      itemCount: schedule.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (_, i) =>
+                          _buildScheduleRow(schedule[i], incoming),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildScheduleRow(InstallmentScheduleEntry entry, bool incoming) {
+    final String statusLabel;
+    final Color statusColor;
+    if (entry.isPaid) {
+      statusLabel = incoming ? 'Cobrada' : 'Pagada';
+      statusColor = AppTheme.income;
+    } else if (entry.isDueOrPast) {
+      statusLabel = 'Pendiente';
+      statusColor = AppTheme.cost;
+    } else {
+      statusLabel = 'Proyectada';
+      statusColor = AppTheme.primary;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: context.cardBorderColor),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 28,
+            child: Text('${entry.index}',
+                style: TextStyle(
+                    color: context.mutedTextColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
+          ),
+          Expanded(
+            child: Text(
+                '${CurrencyFormatter.getMonthName(entry.month)} ${entry.year}',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+          ),
+          Text(CurrencyFormatter.format(entry.amount),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(statusLabel,
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: statusColor)),
+          ),
+        ],
       ),
     );
   }

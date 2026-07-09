@@ -67,6 +67,27 @@ class Installment {
     return index > paidCount ? monthlyAmount : 0;
   }
 
+  /// Calendario completo del compromiso: una entrada por cada cuota, desde
+  /// [startYear]/[startMonth] hasta la última, marcando cuáles ya se pagaron
+  /// y cuáles quedan proyectadas a futuro. A diferencia de [dueAmountForMonth]
+  /// (que resuelve un solo mes para la tarjeta proyectada), esto permite ver
+  /// todo el préstamo de una vez, tal como se registró.
+  List<InstallmentScheduleEntry> schedule() {
+    return List.generate(installmentCount, (i) {
+      final index = i + 1;
+      final monthsFromStart = startMonth - 1 + i;
+      final year = startYear + monthsFromStart ~/ 12;
+      final month = monthsFromStart % 12 + 1;
+      return InstallmentScheduleEntry(
+        index: index,
+        year: year,
+        month: month,
+        amount: monthlyAmount,
+        isPaid: index <= paidCount,
+      );
+    });
+  }
+
   Map<String, dynamic> toMap() => {
         if (id != null) 'id': id,
         'description': description,
@@ -117,4 +138,28 @@ class Installment {
         startMonth: startMonth ?? this.startMonth,
         kind: kind ?? this.kind,
       );
+}
+
+/// Una cuota individual dentro del calendario de un [Installment]: en qué mes
+/// vence, cuánto es y si ya se pagó.
+class InstallmentScheduleEntry {
+  final int index;
+  final int year;
+  final int month;
+  final double amount;
+  final bool isPaid;
+
+  const InstallmentScheduleEntry({
+    required this.index,
+    required this.year,
+    required this.month,
+    required this.amount,
+    required this.isPaid,
+  });
+
+  /// `true` si el mes de vencimiento ya pasó o es el actual.
+  bool get isDueOrPast {
+    final now = DateTime.now();
+    return year < now.year || (year == now.year && month <= now.month);
+  }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import '../models/transaction_item.dart';
 import '../models/monthly_summary.dart';
 import '../models/income_source.dart';
@@ -11,36 +12,39 @@ import '../models/savings_confirmation.dart';
 import '../models/bank_connection.dart';
 import '../models/payment_method_totals.dart';
 
+/// Acceso a la base de datos SQLite. En nativo (Android/iOS/desktop) usa el
+/// motor sqflite normal, guardado en el almacenamiento privado de la app. En
+/// web usa sqflite_common_ffi_web, que persiste en IndexedDB del navegador
+/// (requiere los assets generados por `dart run sqflite_common_ffi_web:setup`
+/// en `web/sqlite3.wasm` y `web/sqflite_sw.js`). En ambos casos los datos
+/// sobreviven a recargas y cierres de la app/pestaña.
 class DbHelper {
   static final DbHelper instance = DbHelper._init();
   static Database? _database;
 
   static bool skipSampleSeeding = false;
 
-  // Web in-memory storage
-  static List<Map<String, dynamic>>? _webDb;
-  static List<Map<String, dynamic>>? _webIncomeSources;
-  static List<Map<String, dynamic>>? _webPaymentMethods;
-  static List<Map<String, dynamic>>? _webExpenseCategories;
-  static List<Map<String, dynamic>>? _webInstallments;
-  static List<Map<String, dynamic>>? _webSavingsConfirmations;
-  static List<Map<String, dynamic>>? _webBankConnections;
-
   DbHelper._init();
 
   Future<Database> get database async {
-    if (kIsWeb) {
-      throw UnsupportedError('SQLite no está soportado en la plataforma Web.');
-    }
     if (_database != null) return _database!;
     _database = await _initDB('mis_finanzas.db');
     return _database!;
   }
 
   Future<Database> _initDB(String filePath) async {
+    if (kIsWeb) {
+      return await databaseFactoryFfiWeb.openDatabase(
+        filePath,
+        options: OpenDatabaseOptions(
+          version: 6,
+          onCreate: _createDB,
+          onUpgrade: _onUpgrade,
+        ),
+      );
+    }
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
-
     return await openDatabase(
       path,
       version: 6,
@@ -298,149 +302,39 @@ class DbHelper {
     }
   }
 
-  // --- Web fallback initialization ---
-
-  void _initWebDb() {
-    if (_webDb != null) return;
-
-    _webExpenseCategories = [
-      {'id': 1, 'key': 'arriendo_dividendo', 'display_name': 'Arriendo / Dividendo', 'section': 'indispensable'},
-      {'id': 2, 'key': 'luz', 'display_name': 'Luz', 'section': 'indispensable'},
-      {'id': 3, 'key': 'agua', 'display_name': 'Agua', 'section': 'indispensable'},
-      {'id': 4, 'key': 'gas', 'display_name': 'Gas', 'section': 'indispensable'},
-      {'id': 5, 'key': 'internet', 'display_name': 'Internet', 'section': 'indispensable'},
-      {'id': 6, 'key': 'tarjeta_credito', 'display_name': 'Tarjeta de Crédito', 'section': 'recurrente'},
-      {'id': 7, 'key': 'prestamo', 'display_name': 'Préstamo', 'section': 'recurrente'},
-      {'id': 8, 'key': 'seguro', 'display_name': 'Seguro', 'section': 'recurrente'},
-      {'id': 9, 'key': 'suscripcion', 'display_name': 'Suscripción', 'section': 'recurrente'},
-      {'id': 10, 'key': 'compras', 'display_name': 'Compras', 'section': 'extraordinario'},
-      {'id': 11, 'key': 'salidas', 'display_name': 'Salidas', 'section': 'extraordinario'},
-      {'id': 12, 'key': 'regalos', 'display_name': 'Regalos', 'section': 'extraordinario'},
-      {'id': 13, 'key': 'medico', 'display_name': 'Médico', 'section': 'extraordinario'},
-      {'id': 14, 'key': 'otros', 'display_name': 'Otros', 'section': 'extraordinario'},
-    ];
-
-    _webIncomeSources = [
-      {'id': 1, 'name': 'Sueldo'},
-      {'id': 2, 'name': 'Ventas'},
-    ];
-
-    _webPaymentMethods = [
-      {'id': 1, 'name': 'Efectivo'},
-    ];
-
-    _webInstallments = [];
-    _webSavingsConfirmations = [];
-    _webBankConnections = [];
-
-    _webDb = [];
-
-    if (!skipSampleSeeding) {
-      final now = DateTime.now();
-      final lastMonth = DateTime(now.year, now.month - 1);
-
-      String isoDate(DateTime date, int day) {
-        return DateTime(date.year, date.month, day, 12, 0).toIso8601String();
-      }
-
-      final initialData = [
-        {'type': 'income', 'category': 'sueldo', 'amount': 2500.0, 'description': 'Sueldo mensual', 'date': isoDate(lastMonth, 5), 'income_source_id': 1},
-        {'type': 'income', 'category': 'ventas', 'amount': 450.0, 'description': 'Venta de artículos usados', 'date': isoDate(lastMonth, 15), 'income_source_id': 2},
-        {'type': 'income', 'category': 'pagos_tercero', 'amount': 150.0, 'description': 'Reembolso de cena', 'date': isoDate(lastMonth, 20)},
-        {'type': 'cost', 'category': 'tarjeta_credito', 'amount': 600.0, 'description': 'Tarjeta de Crédito Visa', 'date': isoDate(lastMonth, 10)},
-        {'type': 'cost', 'category': 'prestamo', 'amount': 300.0, 'description': 'Cuota crédito de consumo', 'date': isoDate(lastMonth, 12)},
-        {'type': 'cost', 'category': 'arriendo_dividendo', 'amount': 250.0, 'description': 'Luz, agua e internet', 'date': isoDate(lastMonth, 5)},
-        {'type': 'cost', 'category': 'compras', 'amount': 400.0, 'description': 'Supermercado mensual', 'date': isoDate(lastMonth, 8)},
-        {'type': 'income', 'category': 'sueldo', 'amount': 2500.0, 'description': 'Sueldo mensual', 'date': isoDate(now, 5), 'income_source_id': 1},
-        {'type': 'cost', 'category': 'arriendo_dividendo', 'amount': 260.0, 'description': 'Luz, agua y gas', 'date': isoDate(now, 5)},
-        {'type': 'cost', 'category': 'compras', 'amount': 180.0, 'description': 'Compra supermercado semana 1', 'date': isoDate(now, 7)},
-      ];
-
-      int idCounter = 1;
-      for (var data in initialData) {
-        final map = Map<String, dynamic>.from(data);
-        map['id'] = idCounter++;
-        map['parent_id'] = null;
-        map.putIfAbsent('income_source_id', () => null);
-        map.putIfAbsent('payment_method_id', () => null);
-        _webDb!.add(map);
-      }
-    }
-  }
-
   // --- Transactions CRUD ---
 
   Future<int> insertTransaction(TransactionItem item) async {
-    if (kIsWeb) {
-      _initWebDb();
-      final newId = _webDb!.isEmpty
-          ? 1
-          : (_webDb!.map((e) => e['id'] as int).reduce((a, b) => a > b ? a : b) + 1);
-      final map = item.toMap();
-      map['id'] = newId;
-      _webDb!.add(map);
-      return newId;
-    } else {
-      final db = await instance.database;
-      return await db.insert('transactions', item.toMap());
-    }
+    final db = await instance.database;
+    return await db.insert('transactions', item.toMap());
   }
 
   Future<int> updateTransaction(TransactionItem item) async {
-    if (kIsWeb) {
-      _initWebDb();
-      final index = _webDb!.indexWhere((element) => element['id'] == item.id);
-      if (index != -1) {
-        _webDb![index] = item.toMap();
-        _webDb![index]['id'] = item.id;
-        return 1;
-      }
-      return 0;
-    } else {
-      final db = await instance.database;
-      return await db.update(
-        'transactions',
-        item.toMap(),
-        where: 'id = ?',
-        whereArgs: [item.id],
-      );
-    }
+    final db = await instance.database;
+    return await db.update(
+      'transactions',
+      item.toMap(),
+      where: 'id = ?',
+      whereArgs: [item.id],
+    );
   }
 
   Future<int> deleteTransaction(int id) async {
-    if (kIsWeb) {
-      _initWebDb();
-      _webDb!.removeWhere((e) => e['parent_id'] == id);
-      _webDb!.removeWhere((e) => e['id'] == id);
-      return 1;
-    } else {
-      final db = await instance.database;
-      await db.delete('transactions', where: 'parent_id = ?', whereArgs: [id]);
-      return await db.delete('transactions', where: 'id = ?', whereArgs: [id]);
-    }
+    final db = await instance.database;
+    await db.delete('transactions', where: 'parent_id = ?', whereArgs: [id]);
+    return await db.delete('transactions', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<TransactionItem>> getTransactionsForMonth(int year, int month) async {
     final monthStr = month.toString().padLeft(2, '0');
-    List<Map<String, dynamic>> allRows;
-
-    if (kIsWeb) {
-      _initWebDb();
-      final prefix = '$year-$monthStr';
-      allRows = _webDb!
-          .where((e) => (e['date'] as String).startsWith(prefix))
-          .toList();
-      allRows.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
-    } else {
-      final db = await instance.database;
-      final queryStr = '$year-$monthStr%';
-      allRows = await db.query(
-        'transactions',
-        where: "date LIKE ?",
-        whereArgs: [queryStr],
-        orderBy: 'date DESC',
-      );
-    }
+    final db = await instance.database;
+    final queryStr = '$year-$monthStr%';
+    final allRows = await db.query(
+      'transactions',
+      where: "date LIKE ?",
+      whereArgs: [queryStr],
+      orderBy: 'date DESC',
+    );
 
     final all = allRows.map((json) => TransactionItem.fromMap(json)).toList();
     final parents = all.where((t) => t.parentId == null).toList();
@@ -457,461 +351,218 @@ class DbHelper {
   }
 
   Future<List<MonthlySummary>> getMonthlySummaries() async {
-    if (kIsWeb) {
-      _initWebDb();
-      final Map<String, Map<String, dynamic>> groups = {};
+    final db = await instance.database;
+    final result = await db.rawQuery('''
+      SELECT
+        CAST(SUBSTR(date, 1, 4) AS INTEGER) as year,
+        CAST(SUBSTR(date, 6, 2) AS INTEGER) as month,
+        SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as total_income,
+        SUM(CASE WHEN type = 'cost' THEN amount ELSE 0 END) as total_cost
+      FROM transactions
+      WHERE parent_id IS NULL
+      GROUP BY year, month
+      ORDER BY year DESC, month DESC
+    ''');
 
-      for (final row in _webDb!) {
-        if (row['parent_id'] != null) continue;
-        final dateStr = row['date'] as String;
-        final y = int.parse(dateStr.substring(0, 4));
-        final m = int.parse(dateStr.substring(5, 7));
-        final key = '$y-$m';
-
-        if (!groups.containsKey(key)) {
-          groups[key] = {'year': y, 'month': m, 'total_income': 0.0, 'total_cost': 0.0};
-        }
-
-        final amount = (row['amount'] as num).toDouble();
-        if (row['type'] == 'income') {
-          groups[key]!['total_income'] = (groups[key]!['total_income'] as double) + amount;
-        } else {
-          groups[key]!['total_cost'] = (groups[key]!['total_cost'] as double) + amount;
-        }
-      }
-
-      final list = groups.values.map((row) {
-        return MonthlySummary(
-          year: row['year'] as int,
-          month: row['month'] as int,
-          totalIncome: row['total_income'] as double,
-          totalCost: row['total_cost'] as double,
-        );
-      }).toList();
-
-      list.sort((a, b) {
-        if (a.year != b.year) return b.year.compareTo(a.year);
-        return b.month.compareTo(a.month);
-      });
-
-      return list;
-    } else {
-      final db = await instance.database;
-      final result = await db.rawQuery('''
-        SELECT
-          CAST(SUBSTR(date, 1, 4) AS INTEGER) as year,
-          CAST(SUBSTR(date, 6, 2) AS INTEGER) as month,
-          SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as total_income,
-          SUM(CASE WHEN type = 'cost' THEN amount ELSE 0 END) as total_cost
-        FROM transactions
-        WHERE parent_id IS NULL
-        GROUP BY year, month
-        ORDER BY year DESC, month DESC
-      ''');
-
-      return result.map((row) {
-        return MonthlySummary(
-          year: row['year'] as int,
-          month: row['month'] as int,
-          totalIncome: (row['total_income'] as num?)?.toDouble() ?? 0.0,
-          totalCost: (row['total_cost'] as num?)?.toDouble() ?? 0.0,
-        );
-      }).toList();
-    }
+    return result.map((row) {
+      return MonthlySummary(
+        year: row['year'] as int,
+        month: row['month'] as int,
+        totalIncome: (row['total_income'] as num?)?.toDouble() ?? 0.0,
+        totalCost: (row['total_cost'] as num?)?.toDouble() ?? 0.0,
+      );
+    }).toList();
   }
 
   // --- Income Sources CRUD ---
 
   Future<int> insertIncomeSource(IncomeSource source) async {
-    if (kIsWeb) {
-      _initWebDb();
-      final newId = _webIncomeSources!.isEmpty
-          ? 1
-          : (_webIncomeSources!.map((e) => e['id'] as int).reduce((a, b) => a > b ? a : b) + 1);
-      _webIncomeSources!.add({'id': newId, 'name': source.name});
-      return newId;
-    } else {
-      final db = await instance.database;
-      return await db.insert('income_sources', source.toMap());
-    }
+    final db = await instance.database;
+    return await db.insert('income_sources', source.toMap());
   }
 
   Future<List<IncomeSource>> getIncomeSources() async {
-    if (kIsWeb) {
-      _initWebDb();
-      return _webIncomeSources!.map((m) => IncomeSource.fromMap(m)).toList();
-    } else {
-      final db = await instance.database;
-      final result = await db.query('income_sources', orderBy: 'name ASC');
-      return result.map((m) => IncomeSource.fromMap(m)).toList();
-    }
+    final db = await instance.database;
+    final result = await db.query('income_sources', orderBy: 'name ASC');
+    return result.map((m) => IncomeSource.fromMap(m)).toList();
   }
 
   Future<int> deleteIncomeSource(int id) async {
-    if (kIsWeb) {
-      _initWebDb();
-      _webIncomeSources!.removeWhere((e) => e['id'] == id);
-      return 1;
-    } else {
-      final db = await instance.database;
-      return await db.delete('income_sources', where: 'id = ?', whereArgs: [id]);
-    }
+    final db = await instance.database;
+    return await db.delete('income_sources', where: 'id = ?', whereArgs: [id]);
   }
 
   // --- Payment Methods CRUD ---
 
   Future<int> insertPaymentMethod(PaymentMethod method) async {
-    if (kIsWeb) {
-      _initWebDb();
-      final newId = _webPaymentMethods!.isEmpty
-          ? 1
-          : (_webPaymentMethods!.map((e) => e['id'] as int).reduce((a, b) => a > b ? a : b) + 1);
-      _webPaymentMethods!.add({'id': newId, 'name': method.name});
-      return newId;
-    } else {
-      final db = await instance.database;
-      return await db.insert('payment_methods', method.toMap());
-    }
+    final db = await instance.database;
+    return await db.insert('payment_methods', method.toMap());
   }
 
   Future<List<PaymentMethod>> getPaymentMethods() async {
-    if (kIsWeb) {
-      _initWebDb();
-      return _webPaymentMethods!.map((m) => PaymentMethod.fromMap(m)).toList();
-    } else {
-      final db = await instance.database;
-      final result = await db.query('payment_methods', orderBy: 'name ASC');
-      return result.map((m) => PaymentMethod.fromMap(m)).toList();
-    }
+    final db = await instance.database;
+    final result = await db.query('payment_methods', orderBy: 'name ASC');
+    return result.map((m) => PaymentMethod.fromMap(m)).toList();
   }
 
   Future<int> deletePaymentMethod(int id) async {
-    if (kIsWeb) {
-      _initWebDb();
-      _webPaymentMethods!.removeWhere((e) => e['id'] == id);
-      return 1;
-    } else {
-      final db = await instance.database;
-      return await db.delete('payment_methods', where: 'id = ?', whereArgs: [id]);
-    }
+    final db = await instance.database;
+    return await db.delete('payment_methods', where: 'id = ?', whereArgs: [id]);
   }
 
   // --- Expense Categories CRUD ---
 
   Future<List<ExpenseCategory>> getExpenseCategories() async {
-    if (kIsWeb) {
-      _initWebDb();
-      return _webExpenseCategories!.map((m) => ExpenseCategory.fromMap(m)).toList();
-    } else {
-      final db = await instance.database;
-      final result = await db.query('expense_categories', orderBy: 'section ASC, display_name ASC');
-      return result.map((m) => ExpenseCategory.fromMap(m)).toList();
-    }
+    final db = await instance.database;
+    final result = await db.query('expense_categories', orderBy: 'section ASC, display_name ASC');
+    return result.map((m) => ExpenseCategory.fromMap(m)).toList();
   }
 
   Future<int> insertExpenseCategory(ExpenseCategory category) async {
-    if (kIsWeb) {
-      _initWebDb();
-      final newId = _nextWebId(_webExpenseCategories!);
-      _webExpenseCategories!.add(category.toMap()..['id'] = newId);
-      return newId;
-    } else {
-      final db = await instance.database;
-      return await db.insert('expense_categories', category.toMap());
-    }
+    final db = await instance.database;
+    return await db.insert('expense_categories', category.toMap());
   }
 
   Future<int> updateExpenseCategory(ExpenseCategory category) async {
-    if (kIsWeb) {
-      _initWebDb();
-      final index =
-          _webExpenseCategories!.indexWhere((e) => e['id'] == category.id);
-      if (index == -1) return 0;
-      _webExpenseCategories![index] = category.toMap()..['id'] = category.id;
-      return 1;
-    } else {
-      final db = await instance.database;
-      return await db.update('expense_categories', category.toMap(),
-          where: 'id = ?', whereArgs: [category.id]);
-    }
+    final db = await instance.database;
+    return await db.update('expense_categories', category.toMap(),
+        where: 'id = ?', whereArgs: [category.id]);
   }
 
   Future<int> deleteExpenseCategory(int id) async {
-    if (kIsWeb) {
-      _initWebDb();
-      _webExpenseCategories!.removeWhere((e) => e['id'] == id);
-      return 1;
-    } else {
-      final db = await instance.database;
-      return await db.delete('expense_categories', where: 'id = ?', whereArgs: [id]);
-    }
+    final db = await instance.database;
+    return await db.delete('expense_categories', where: 'id = ?', whereArgs: [id]);
   }
 
   /// ¿Existe ya una categoría con esta key? Útil para garantizar slugs únicos.
   Future<bool> expenseCategoryKeyExists(String key) async {
-    if (kIsWeb) {
-      _initWebDb();
-      return _webExpenseCategories!.any((e) => e['key'] == key);
-    } else {
-      final db = await instance.database;
-      final rows = await db.query('expense_categories',
-          where: 'key = ?', whereArgs: [key], limit: 1);
-      return rows.isNotEmpty;
-    }
+    final db = await instance.database;
+    final rows = await db.query('expense_categories',
+        where: 'key = ?', whereArgs: [key], limit: 1);
+    return rows.isNotEmpty;
   }
 
   // --- Installments CRUD ---
 
   Future<List<Installment>> getInstallments() async {
-    if (kIsWeb) {
-      _initWebDb();
-      return _webInstallments!.map((m) => Installment.fromMap(m)).toList();
-    } else {
-      final db = await instance.database;
-      final result = await db.query('installments', orderBy: 'description ASC');
-      return result.map((m) => Installment.fromMap(m)).toList();
-    }
+    final db = await instance.database;
+    final result = await db.query('installments', orderBy: 'description ASC');
+    return result.map((m) => Installment.fromMap(m)).toList();
   }
 
   Future<int> insertInstallment(Installment installment) async {
-    if (kIsWeb) {
-      _initWebDb();
-      final newId = _nextWebId(_webInstallments!);
-      _webInstallments!.add(installment.toMap()..['id'] = newId);
-      return newId;
-    } else {
-      final db = await instance.database;
-      return await db.insert('installments', installment.toMap());
-    }
+    final db = await instance.database;
+    return await db.insert('installments', installment.toMap());
   }
 
   Future<int> updateInstallment(Installment installment) async {
-    if (kIsWeb) {
-      _initWebDb();
-      final index =
-          _webInstallments!.indexWhere((e) => e['id'] == installment.id);
-      if (index == -1) return 0;
-      _webInstallments![index] = installment.toMap()..['id'] = installment.id;
-      return 1;
-    } else {
-      final db = await instance.database;
-      return await db.update('installments', installment.toMap(),
-          where: 'id = ?', whereArgs: [installment.id]);
-    }
+    final db = await instance.database;
+    return await db.update('installments', installment.toMap(),
+        where: 'id = ?', whereArgs: [installment.id]);
   }
 
   Future<int> deleteInstallment(int id) async {
-    if (kIsWeb) {
-      _initWebDb();
-      _webInstallments!.removeWhere((e) => e['id'] == id);
-      return 1;
-    } else {
-      final db = await instance.database;
-      return await db.delete('installments', where: 'id = ?', whereArgs: [id]);
-    }
-  }
-
-  /// Siguiente id incremental para las listas en memoria del fallback web.
-  int _nextWebId(List<Map<String, dynamic>> rows) {
-    if (rows.isEmpty) return 1;
-    return rows.map((e) => e['id'] as int).reduce((a, b) => a > b ? a : b) + 1;
+    final db = await instance.database;
+    return await db.delete('installments', where: 'id = ?', whereArgs: [id]);
   }
 
   // --- Savings Confirmations CRUD ---
 
   Future<SavingsConfirmation?> getSavingsConfirmation(int year, int month) async {
-    if (kIsWeb) {
-      _initWebDb();
-      final match = _webSavingsConfirmations!
-          .where((e) => e['year'] == year && e['month'] == month)
-          .toList();
-      if (match.isEmpty) return null;
-      return SavingsConfirmation.fromMap(match.first);
-    } else {
-      final db = await instance.database;
-      final rows = await db.query('savings_confirmations',
-          where: 'year = ? AND month = ?', whereArgs: [year, month], limit: 1);
-      if (rows.isEmpty) return null;
-      return SavingsConfirmation.fromMap(rows.first);
-    }
+    final db = await instance.database;
+    final rows = await db.query('savings_confirmations',
+        where: 'year = ? AND month = ?', whereArgs: [year, month], limit: 1);
+    if (rows.isEmpty) return null;
+    return SavingsConfirmation.fromMap(rows.first);
   }
 
   Future<List<SavingsConfirmation>> getAllSavingsConfirmations() async {
-    if (kIsWeb) {
-      _initWebDb();
-      return _webSavingsConfirmations!
-          .map((m) => SavingsConfirmation.fromMap(m))
-          .toList();
-    } else {
-      final db = await instance.database;
-      final result = await db.query('savings_confirmations',
-          orderBy: 'year ASC, month ASC');
-      return result.map((m) => SavingsConfirmation.fromMap(m)).toList();
-    }
+    final db = await instance.database;
+    final result = await db.query('savings_confirmations',
+        orderBy: 'year ASC, month ASC');
+    return result.map((m) => SavingsConfirmation.fromMap(m)).toList();
   }
 
   Future<int> insertOrUpdateSavingsConfirmation(
       SavingsConfirmation confirmation) async {
-    if (kIsWeb) {
-      _initWebDb();
-      final index = _webSavingsConfirmations!.indexWhere(
-          (e) => e['year'] == confirmation.year && e['month'] == confirmation.month);
-      final map = confirmation.toMap();
-      if (index != -1) {
-        map['id'] = _webSavingsConfirmations![index]['id'];
-        _webSavingsConfirmations![index] = map;
-        return map['id'] as int;
-      } else {
-        final newId = _nextWebId(_webSavingsConfirmations!);
-        map['id'] = newId;
-        _webSavingsConfirmations!.add(map);
-        return newId;
-      }
-    } else {
-      final db = await instance.database;
-      return await db.insert('savings_confirmations', confirmation.toMap(),
-          conflictAlgorithm: ConflictAlgorithm.replace);
-    }
+    final db = await instance.database;
+    return await db.insert('savings_confirmations', confirmation.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   // --- Bank Connections CRUD ---
 
   Future<List<BankConnection>> getBankConnections() async {
-    if (kIsWeb) {
-      _initWebDb();
-      return _webBankConnections!.map((m) => BankConnection.fromMap(m)).toList();
-    } else {
-      final db = await instance.database;
-      final result =
-          await db.query('bank_connections', orderBy: 'institution_name ASC');
-      return result.map((m) => BankConnection.fromMap(m)).toList();
-    }
+    final db = await instance.database;
+    final result =
+        await db.query('bank_connections', orderBy: 'institution_name ASC');
+    return result.map((m) => BankConnection.fromMap(m)).toList();
   }
 
   Future<int> insertBankConnection(BankConnection connection) async {
-    if (kIsWeb) {
-      _initWebDb();
-      final newId = _nextWebId(_webBankConnections!);
-      _webBankConnections!.add(connection.toMap()..['id'] = newId);
-      return newId;
-    } else {
-      final db = await instance.database;
-      return await db.insert('bank_connections', connection.toMap());
-    }
+    final db = await instance.database;
+    return await db.insert('bank_connections', connection.toMap());
   }
 
   Future<int> deleteBankConnection(int id) async {
-    if (kIsWeb) {
-      _initWebDb();
-      _webBankConnections!.removeWhere((e) => e['id'] == id);
-      return 1;
-    } else {
-      final db = await instance.database;
-      return await db.delete('bank_connections', where: 'id = ?', whereArgs: [id]);
-    }
+    final db = await instance.database;
+    return await db.delete('bank_connections', where: 'id = ?', whereArgs: [id]);
   }
 
   /// Totales históricos de ingresos y gastos agrupados por medio de pago.
   /// Permite medir la actividad de cada institución vinculada.
   Future<Map<int, PaymentMethodTotals>> getPaymentMethodTotals() async {
-    if (kIsWeb) {
-      _initWebDb();
-      final totals = <int, List<double>>{};
-      for (final row in _webDb!) {
-        if (row['parent_id'] != null || row['payment_method_id'] == null) {
-          continue;
-        }
-        final methodId = row['payment_method_id'] as int;
-        final amount = (row['amount'] as num).toDouble();
-        final entry = totals.putIfAbsent(methodId, () => [0.0, 0.0]);
-        if (row['type'] == 'income') {
-          entry[0] += amount;
-        } else {
-          entry[1] += amount;
-        }
-      }
-      return totals.map((id, sums) =>
-          MapEntry(id, PaymentMethodTotals(income: sums[0], cost: sums[1])));
-    } else {
-      final db = await instance.database;
-      final result = await db.rawQuery('''
-        SELECT
-          payment_method_id,
-          SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as total_income,
-          SUM(CASE WHEN type = 'cost' THEN amount ELSE 0 END) as total_cost
-        FROM transactions
-        WHERE parent_id IS NULL AND payment_method_id IS NOT NULL
-        GROUP BY payment_method_id
-      ''');
+    final db = await instance.database;
+    final result = await db.rawQuery('''
+      SELECT
+        payment_method_id,
+        SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as total_income,
+        SUM(CASE WHEN type = 'cost' THEN amount ELSE 0 END) as total_cost
+      FROM transactions
+      WHERE parent_id IS NULL AND payment_method_id IS NOT NULL
+      GROUP BY payment_method_id
+    ''');
 
-      return {
-        for (final row in result)
-          row['payment_method_id'] as int: PaymentMethodTotals(
-            income: (row['total_income'] as num?)?.toDouble() ?? 0.0,
-            cost: (row['total_cost'] as num?)?.toDouble() ?? 0.0,
-          ),
-      };
-    }
+    return {
+      for (final row in result)
+        row['payment_method_id'] as int: PaymentMethodTotals(
+          income: (row['total_income'] as num?)?.toDouble() ?? 0.0,
+          cost: (row['total_cost'] as num?)?.toDouble() ?? 0.0,
+        ),
+    };
   }
 
   /// Totales de ingresos y gastos por medio de pago, desglosados por mes.
   /// Clave externa: 'yyyy-MM'; clave interna: id del medio de pago.
   Future<Map<String, Map<int, PaymentMethodTotals>>>
       getMonthlyPaymentMethodTotals() async {
-    if (kIsWeb) {
-      _initWebDb();
-      final totals = <String, Map<int, List<double>>>{};
-      for (final row in _webDb!) {
-        if (row['parent_id'] != null || row['payment_method_id'] == null) {
-          continue;
-        }
-        final monthKey = (row['date'] as String).substring(0, 7);
-        final methodId = row['payment_method_id'] as int;
-        final amount = (row['amount'] as num).toDouble();
-        final entry = totals
-            .putIfAbsent(monthKey, () => {})
-            .putIfAbsent(methodId, () => [0.0, 0.0]);
-        if (row['type'] == 'income') {
-          entry[0] += amount;
-        } else {
-          entry[1] += amount;
-        }
-      }
-      return totals.map((monthKey, byMethod) => MapEntry(
-            monthKey,
-            byMethod.map((id, sums) => MapEntry(
-                id, PaymentMethodTotals(income: sums[0], cost: sums[1]))),
-          ));
-    } else {
-      final db = await instance.database;
-      final result = await db.rawQuery('''
-        SELECT
-          SUBSTR(date, 1, 7) as month_key,
-          payment_method_id,
-          SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as total_income,
-          SUM(CASE WHEN type = 'cost' THEN amount ELSE 0 END) as total_cost
-        FROM transactions
-        WHERE parent_id IS NULL AND payment_method_id IS NOT NULL
-        GROUP BY month_key, payment_method_id
-      ''');
+    final db = await instance.database;
+    final result = await db.rawQuery('''
+      SELECT
+        SUBSTR(date, 1, 7) as month_key,
+        payment_method_id,
+        SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as total_income,
+        SUM(CASE WHEN type = 'cost' THEN amount ELSE 0 END) as total_cost
+      FROM transactions
+      WHERE parent_id IS NULL AND payment_method_id IS NOT NULL
+      GROUP BY month_key, payment_method_id
+    ''');
 
-      final totals = <String, Map<int, PaymentMethodTotals>>{};
-      for (final row in result) {
-        final monthKey = row['month_key'] as String;
-        totals.putIfAbsent(monthKey, () => {})[row['payment_method_id'] as int] =
-            PaymentMethodTotals(
-          income: (row['total_income'] as num?)?.toDouble() ?? 0.0,
-          cost: (row['total_cost'] as num?)?.toDouble() ?? 0.0,
-        );
-      }
-      return totals;
+    final totals = <String, Map<int, PaymentMethodTotals>>{};
+    for (final row in result) {
+      final monthKey = row['month_key'] as String;
+      totals.putIfAbsent(monthKey, () => {})[row['payment_method_id'] as int] =
+          PaymentMethodTotals(
+        income: (row['total_income'] as num?)?.toDouble() ?? 0.0,
+        cost: (row['total_cost'] as num?)?.toDouble() ?? 0.0,
+      );
     }
+    return totals;
   }
 
   // --- Close ---
 
   Future<void> close() async {
-    if (kIsWeb) return;
     final db = _database;
     if (db != null) {
       await db.close();

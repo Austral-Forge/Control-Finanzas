@@ -1,0 +1,24 @@
+{
+  "buildCommand": "git clone https://github.com/flutter/flutter.git --depth 1 --branch 3.44.2 _flutter_sdk && export PATH=\"$PATH:$(pwd)/_flutter_sdk/bin\" && flutter pub get && dart run sqflite_common_ffi_web:setup && flutter build web --release",
+  "outputDirectory": "build/web",
+  "installCommand": "echo 'skip: flutter pub get runs inside buildCommand'",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ]
+}

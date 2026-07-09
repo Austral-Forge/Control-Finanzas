@@ -83,4 +83,43 @@ void main() {
       expect(inst.dueAmountForMonth(2027, 3), 0);
     });
   });
+
+  group('schedule', () {
+    test('genera una entrada por cuota desde el mes de inicio', () {
+      final inst = make(
+        startYear: 2026, startMonth: 7,
+        installmentCount: 3, paidCount: 1, monthlyAmount: 20000,
+      );
+      final schedule = inst.schedule();
+      expect(schedule.length, 3);
+      expect(schedule[0].year, 2026);
+      expect(schedule[0].month, 7);
+      expect(schedule[0].isPaid, isTrue);
+      expect(schedule[1].year, 2026);
+      expect(schedule[1].month, 8);
+      expect(schedule[1].isPaid, isFalse);
+      expect(schedule[2].year, 2026);
+      expect(schedule[2].month, 9);
+      expect(schedule[2].isPaid, isFalse);
+    });
+
+    test('cruza el anio correctamente', () {
+      final inst = make(
+        startYear: 2026, startMonth: 11,
+        installmentCount: 4, paidCount: 0,
+      );
+      final schedule = inst.schedule();
+      expect(schedule.map((e) => (e.year, e.month)).toList(), [
+        (2026, 11),
+        (2026, 12),
+        (2027, 1),
+        (2027, 2),
+      ]);
+    });
+
+    test('todas las cuotas conservan el monto mensual', () {
+      final inst = make(installmentCount: 5, monthlyAmount: 15000);
+      expect(inst.schedule().every((e) => e.amount == 15000), isTrue);
+    });
+  });
 }
