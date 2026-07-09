@@ -105,4 +105,75 @@ void main() {
       expect(pm.projectedBalance, 65000);
     });
   });
+
+  group('ProjectedMonth.series', () {
+    test('genera una tarjeta por cada mes con cuotas pendientes de un prestamo largo', () {
+      // Prestamo de la mama: junio a 16 meses, ya pagadas junio y julio.
+      final loan = cuota(
+        monthlyAmount: 50000, installmentCount: 16, paidCount: 2,
+        startYear: 2026, startMonth: 6,
+      );
+      // El ultimo mes real con datos es julio (donde se pago la 2da cuota).
+      final series = ProjectedMonth.series(
+        lastYear: 2026, lastMonth: 7,
+        carriedBalance: 300000,
+        installments: [loan],
+      );
+
+      // Quedan 14 cuotas pendientes: agosto 2026 a septiembre 2027.
+      expect(series.length, 14);
+      expect(series.first.year, 2026);
+      expect(series.first.month, 8);
+      expect(series.last.year, 2027);
+      expect(series.last.month, 9);
+      for (final pm in series) {
+        expect(pm.projectedExpenses, 50000);
+      }
+    });
+
+    test('el saldo se arrastra de un mes proyectado al siguiente', () {
+      final loan = cuota(
+        monthlyAmount: 100000, installmentCount: 3, paidCount: 0,
+        startYear: 2026, startMonth: 8,
+      );
+      final series = ProjectedMonth.series(
+        lastYear: 2026, lastMonth: 7,
+        carriedBalance: 250000,
+        installments: [loan],
+      );
+      expect(series.length, 3);
+      expect(series[0].carriedBalance, 250000);
+      expect(series[0].projectedBalance, 150000);
+      expect(series[1].carriedBalance, 150000);
+      expect(series[1].projectedBalance, 50000);
+      expect(series[2].carriedBalance, 50000);
+      expect(series[2].projectedBalance, -50000);
+    });
+
+    test('sin cuotas pendientes devuelve un solo mes (el siguiente)', () {
+      final series = ProjectedMonth.series(
+        lastYear: 2026, lastMonth: 7,
+        carriedBalance: 100000,
+        installments: [],
+      );
+      expect(series.length, 1);
+      expect(series.first.year, 2026);
+      expect(series.first.month, 8);
+    });
+
+    test('solo el primer mes de la serie respeta savingsConfirmed', () {
+      final loan = cuota(
+        monthlyAmount: 10000, installmentCount: 2, paidCount: 0,
+        startYear: 2026, startMonth: 8,
+      );
+      final series = ProjectedMonth.series(
+        lastYear: 2026, lastMonth: 7,
+        carriedBalance: 50000,
+        installments: [loan],
+        savingsConfirmed: false,
+      );
+      expect(series[0].savingsConfirmed, isFalse);
+      expect(series[1].savingsConfirmed, isTrue);
+    });
+  });
 }

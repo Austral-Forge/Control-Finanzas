@@ -9,6 +9,8 @@ import '../../core/theme/context_theme_x.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../blocs/settings_bloc.dart';
 import '../blocs/settings_state.dart';
+import '../../data/models/installment.dart';
+import '../../data/models/loan_adjustment.dart';
 import '../../data/models/monthly_projection.dart';
 import '../../data/models/projected_month.dart';
 import '../widgets/index.dart';
@@ -146,7 +148,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final settingsState = context.watch<SettingsBloc>().state;
     final installments = settingsState is SettingsLoaded
         ? settingsState.installments
-        : const <dynamic>[];
+        : const <Installment>[];
 
     final lastSummary = chronological.last;
     final now = DateTime.now();
@@ -154,15 +156,17 @@ class _HomeScreenState extends State<HomeScreen> {
     final savingsConfirmed =
         state.savingsConfirmations.containsKey(currentKey);
 
-    final projected = ProjectedMonth.next(
+    // Una tarjeta proyectada por cada mes con cuotas pendientes (no solo la
+    // siguiente), para que un prestamo a varios meses se vea completo.
+    final projectedSeries = ProjectedMonth.series(
       lastYear: lastSummary.year,
       lastMonth: lastSummary.month,
       carriedBalance: totalSavings,
-      installments: installments.cast(),
+      installments: installments,
       savingsConfirmed: savingsConfirmed,
     );
 
-    final totalCards = projections.length + 1;
+    final totalCards = projections.length + projectedSeries.length;
     _scheduleInitialPage(totalCards);
 
     final currentIndex = _page.round().clamp(0, totalCards - 1);
@@ -187,13 +191,21 @@ class _HomeScreenState extends State<HomeScreen> {
               itemBuilder: (context, index) {
                 if (index < projections.length) {
                   return _build3DCard(
-                      index, _MonthCarouselCard(projection: projections[index]));
+                    index,
+                    _MonthCarouselCard(
+                      projection: projections[index],
+                      installments: installments,
+                    ),
+                  );
                 }
+                final seriesIndex = index - projections.length;
                 return _build3DCard(
                   index,
                   _ProjectedCarouselCard(
-                    projected: projected,
-                    onConfirmPending: () => _openSavingsConfirmation(state),
+                    projected: projectedSeries[seriesIndex],
+                    onConfirmPending: seriesIndex == 0
+                        ? () => _openSavingsConfirmation(state)
+                        : null,
                   ),
                 );
               },
@@ -368,16 +380,25 @@ class _QuickAddButton extends StatelessWidget {
   }
 }
 
-/// Tarjeta de un mes: el resumen macro Ingresos − Egresos = Ahorro/Pérdida.
+/// Tarjeta de un mes: el resumen macro Ingresos − Egresos = Ahorro/Pérdida,
+/// incluyendo el efecto de las cuotas de préstamos que vencieron ese mes
+/// (pagadas o no), para que cada prestamo configurado quede reflejado en el
+/// mes que corresponde y no solo en la tarjeta proyectada.
 class _MonthCarouselCard extends StatelessWidget {
   final MonthlyProjection projection;
+  final List<Installment> installments;
 
-  const _MonthCarouselCard({required this.projection});
+  const _MonthCarouselCard({
+    required this.projection,
+    required this.installments,
+  });
 
   @override
   Widget build(BuildContext context) {
     final summary = projection.summary;
-    final balance = summary.balance;
+    final adjustment =
+        LoanAdjustment.forMonth(installments, summary.year, summary.month);
+    final balance = summary.balance + adjustment.net;
     final isDeficit = balance < 0;
     final monthName = CurrencyFormatter.getMonthName(summary.month);
     final balanceColor = isDeficit ? AppTheme.cost : AppTheme.income;
@@ -427,6 +448,20 @@ class _MonthCarouselCard extends StatelessWidget {
                 label: 'Egresos',
                 value: summary.totalCost,
                 color: AppTheme.cost),
+            if (adjustment.outgoing > 0) ...[
+              const SizedBox(height: 10),
+              _CardRow(
+                  label: '- Cuotas de prestamos',
+                  value: adjustment.outgoing,
+                  color: AppTheme.cost),
+            ],
+            if (adjustment.incoming > 0) ...[
+              const SizedBox(height: 10),
+              _CardRow(
+                  label: '+ Cuotas por cobrar',
+                  value: adjustment.incoming,
+                  color: AppTheme.income),
+            ],
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Divider(color: context.dividerColor, height: 1),
@@ -514,7 +549,10 @@ class _CardRow extends StatelessWidget {
 /// confirmación pendiente se abre la validación para empezar el mes.
 class _ProjectedCarouselCard extends StatelessWidget {
   final ProjectedMonth projected;
-  final VoidCallback onConfirmPending;
+
+  /// `null` para las tarjetas mas alla del mes inmediato siguiente: solo el
+  /// primer mes proyectado gatilla la confirmacion de cierre de mes.
+  final VoidCallback? onConfirmPending;
 
   const _ProjectedCarouselCard({
     required this.projected,
