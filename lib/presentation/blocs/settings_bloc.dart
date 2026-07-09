@@ -1,6 +1,10 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/constants/expense_sections.dart';
+import '../../core/constants/institution_catalog.dart';
 import '../../domain/repositories/finance_repository.dart';
+import '../../domain/services/bank_sync_service.dart';
+import '../../data/models/bank_connection.dart';
+import '../../data/services/manual_bank_sync_service.dart';
 import '../../data/models/expense_category.dart';
 import '../../data/models/income_source.dart';
 import '../../data/models/payment_method.dart';
@@ -10,7 +14,15 @@ import 'settings_state.dart';
 class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
   final FinanceRepository financeRepository;
 
-  SettingsBloc({required this.financeRepository}) : super(SettingsInitial()) {
+  /// Proveedor de sincronizacion open banking. Hoy: modo manual; inyectar una
+  /// implementacion real (Fintoc/Floid) cuando este disponible.
+  final BankSyncService bankSyncService;
+
+  SettingsBloc({
+    required this.financeRepository,
+    BankSyncService? bankSyncService,
+  })  : bankSyncService = bankSyncService ?? ManualBankSyncService(),
+        super(SettingsInitial()) {
     on<LoadSettings>(_onLoadSettings);
     on<AddIncomeSourceEvent>(_onAddIncomeSource);
     on<DeleteIncomeSourceEvent>(_onDeleteIncomeSource);
@@ -22,6 +34,8 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     on<AddInstallmentEvent>(_onAddInstallment);
     on<UpdateInstallmentEvent>(_onUpdateInstallment);
     on<DeleteInstallmentEvent>(_onDeleteInstallment);
+    on<ConnectInstitutionEvent>(_onConnectInstitution);
+    on<DisconnectInstitutionEvent>(_onDisconnectInstitution);
   }
 
   Future<void> _onLoadSettings(
@@ -42,11 +56,18 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     final paymentMethods = await financeRepository.getPaymentMethods();
     final expenseCategories = await financeRepository.getExpenseCategories();
     final installments = await financeRepository.getInstallments();
+    final bankConnections = await financeRepository.getBankConnections();
+    final paymentMethodTotals = await financeRepository.getPaymentMethodTotals();
+    final monthlyMethodTotals =
+        await financeRepository.getMonthlyPaymentMethodTotals();
     return SettingsLoaded(
       incomeSources: incomeSources,
       paymentMethods: paymentMethods,
       expenseCategories: expenseCategories,
       installments: installments,
+      bankConnections: bankConnections,
+      paymentMethodTotals: paymentMethodTotals,
+      monthlyMethodTotals: monthlyMethodTotals,
     );
   }
 
@@ -221,6 +242,80 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     final current = state;
     if (current is SettingsLoaded) {
       emit(current.copyWith(installments: installments));
+    }
+  }
+
+  // --- Bank connections ---
+
+  Future<void> _onConnectInstitution(
+    ConnectInstitutionEvent event,
+    Emitter<SettingsState> emit,
+  ) async {
+    try {
+      final institution = event.institution;
+      final paymentMethodId = await _ensurePaymentMethod(institution.name);
+      if (bankSyncService.isAvailable) {
+        await bankSyncService.linkAccount(institution);
+      }
+      await financeRepository.addBankConnection(BankConnection(
+        institutionKey: institution.key,
+        institutionName: institution.name,
+        institutionType: InstitutionCatalog.typeToDb(institution.type),
+        paymentMethodId: paymentMethodId,
+        syncMode: bankSyncService.isAvailable
+            ? bankSyncService.providerName
+            : BankConnection.syncModeManual,
+        connectedAt: DateTime.now().toIso8601String(),
+      ));
+      await _reloadConnections(emit);
+    } catch (e) {
+      emit(SettingsError(message: e.toString()));
+    }
+  }
+
+  Future<void> _onDisconnectInstitution(
+    DisconnectInstitutionEvent event,
+    Emitter<SettingsState> emit,
+  ) async {
+    try {
+      // Solo se elimina el vínculo: el medio de pago y sus transacciones se
+      // conservan para no perder el historial del usuario.
+      await financeRepository.deleteBankConnection(event.id);
+      await _reloadConnections(emit);
+    } catch (e) {
+      emit(SettingsError(message: e.toString()));
+    }
+  }
+
+  /// Devuelve el id del medio de pago con [name], creándolo si no existe.
+  /// Así cada institución conectada mide sus movimientos vía su medio de pago.
+  Future<int?> _ensurePaymentMethod(String name) async {
+    final methods = await financeRepository.getPaymentMethods();
+    for (final method in methods) {
+      if (method.name.toLowerCase() == name.toLowerCase()) return method.id;
+    }
+    await financeRepository.addPaymentMethod(PaymentMethod(name: name));
+    final refreshed = await financeRepository.getPaymentMethods();
+    for (final method in refreshed) {
+      if (method.name.toLowerCase() == name.toLowerCase()) return method.id;
+    }
+    return null;
+  }
+
+  Future<void> _reloadConnections(Emitter<SettingsState> emit) async {
+    final bankConnections = await financeRepository.getBankConnections();
+    final paymentMethods = await financeRepository.getPaymentMethods();
+    final paymentMethodTotals = await financeRepository.getPaymentMethodTotals();
+    final monthlyMethodTotals =
+        await financeRepository.getMonthlyPaymentMethodTotals();
+    final current = state;
+    if (current is SettingsLoaded) {
+      emit(current.copyWith(
+        bankConnections: bankConnections,
+        paymentMethods: paymentMethods,
+        paymentMethodTotals: paymentMethodTotals,
+        monthlyMethodTotals: monthlyMethodTotals,
+      ));
     }
   }
 }

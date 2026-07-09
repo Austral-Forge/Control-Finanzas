@@ -1,4 +1,5 @@
 import '../../data/models/transaction_item.dart';
+import 'currency_formatter.dart';
 
 class CategoryTrend {
   final String categoryKey;
@@ -79,6 +80,9 @@ class FinancialAnalysis {
   final Map<String, String> categoryDisplayNames;
   final Map<String, String> categorySections;
 
+  /// Suma de cuotas pactadas que vencen este mes (compromisos en cuotas).
+  final double monthlyInstallmentCommitment;
+
   FinancialAnalysis({
     required this.currentTransactions,
     required this.previousTransactions,
@@ -88,6 +92,7 @@ class FinancialAnalysis {
     required this.previousCost,
     required this.categoryDisplayNames,
     required this.categorySections,
+    this.monthlyInstallmentCommitment = 0,
   });
 
   bool get hasPreviousData => previousTransactions.isNotEmpty;
@@ -227,64 +232,32 @@ class FinancialAnalysis {
   }
 
   // --- Smart Recommendations ---
+
+  static const int _maxRecommendations = 5;
+  static const double _savingsTargetRate = 20.0;
+  static const double _installmentBurdenLimit = 25.0;
+  static const double _categoryConcentrationLimit = 40.0;
+  static const double _incomeDropAlertPercent = 10.0;
+  static const int _emergencyFundMonths = 3;
+  static const int _antExpenseMinCount = 8;
+
+  /// Consejos priorizados: primero las alertas accionables, luego
+  /// oportunidades de mejora y al final los refuerzos positivos.
   List<Recommendation> get recommendations {
-    final result = <Recommendation>[];
-    final savingsRate =
-        currentIncome > 0 ? (currentBalance / currentIncome) * 100 : 0.0;
+    final warnings = <Recommendation>[];
+    final tips = <Recommendation>[];
+    final positives = <Recommendation>[];
 
-    if (savingsRate >= 20) {
-      result.add(Recommendation(
-        title: 'Buen ritmo de ahorro',
-        description:
-            'Estas ahorrando el ${savingsRate.toStringAsFixed(1)}% de tus ingresos. Sigue asi.',
-        type: RecommendationType.positive,
-      ));
-    } else if (savingsRate > 0) {
-      result.add(Recommendation(
-        title: 'Aumenta tu ahorro',
-        description:
-            'Solo estas ahorrando el ${savingsRate.toStringAsFixed(1)}%. '
-            'La regla 50/30/20 recomienda al menos un 20%.',
-        type: RecommendationType.warning,
-      ));
-    } else if (currentBalance < 0) {
-      result.add(Recommendation(
-        title: 'Gastos superan ingresos',
-        description:
-            'Este mes gastaste mas de lo que ingresaste. Revisa las categorias con mayor gasto.',
-        type: RecommendationType.warning,
-      ));
-    }
+    _addBalanceAndSavingsAdvice(warnings, tips, positives);
+    _addIncomeDropAdvice(warnings);
+    _addOverspendingAdvice(warnings);
+    _addInstallmentBurdenAdvice(warnings);
+    _addBudgetRuleAdvice(warnings);
+    _addCategoryConcentrationAdvice(tips);
+    _addAntExpensesAdvice(tips);
+    _addImprovementAdvice(positives);
 
-    for (final alert in overspendingAlerts.take(2)) {
-      result.add(Recommendation(
-        title: '${alert.displayName} aumento ${alert.changePercent.toStringAsFixed(0)}%',
-        description:
-            'Paso de \$${alert.previousAmount.toStringAsFixed(0)} a '
-            '\$${alert.currentAmount.toStringAsFixed(0)} respecto al mes anterior.',
-        type: RecommendationType.warning,
-      ));
-    }
-
-    final rule = budgetRule;
-    if (rule.needsPercent > 60) {
-      result.add(Recommendation(
-        title: 'Gastos indispensables muy altos',
-        description:
-            'Representan el ${rule.needsPercent.toStringAsFixed(1)}% de tus ingresos. '
-            'Lo ideal es maximo 50%.',
-        type: RecommendationType.warning,
-      ));
-    }
-
-    if (hasPreviousData && currentBalance > previousBalance) {
-      result.add(const Recommendation(
-        title: 'Mejoraste vs el mes anterior',
-        description: 'Tu balance mejoro respecto al mes pasado. Buen trabajo.',
-        type: RecommendationType.positive,
-      ));
-    }
-
+    final result = [...warnings, ...tips, ...positives];
     if (result.isEmpty) {
       result.add(const Recommendation(
         title: 'En camino',
@@ -293,8 +266,212 @@ class FinancialAnalysis {
         type: RecommendationType.neutral,
       ));
     }
+    return result.take(_maxRecommendations).toList();
+  }
 
-    return result;
+  double get _savingsRate =>
+      currentIncome > 0 ? (currentBalance / currentIncome) * 100 : 0.0;
+
+  /// Categoria prescindible (no indispensable) con mayor gasto del mes.
+  CategoryTrend? get _topDiscretionaryCategory {
+    for (final trend in categoryTrends) {
+      final section = categorySections[trend.categoryKey] ?? 'extraordinario';
+      if (section != 'indispensable' && trend.currentAmount > 0) return trend;
+    }
+    return null;
+  }
+
+  void _addBalanceAndSavingsAdvice(
+    List<Recommendation> warnings,
+    List<Recommendation> tips,
+    List<Recommendation> positives,
+  ) {
+    if (currentBalance < 0) {
+      final deficit = CurrencyFormatter.format(currentBalance.abs());
+      final topWants = _topDiscretionaryCategory;
+      final cutHint = topWants != null
+          ? ' Tu mayor gasto prescindible es ${topWants.displayName} '
+              '(${CurrencyFormatter.format(topWants.currentAmount)}): '
+              'es el primer lugar donde recortar.'
+          : ' Revisa las categorias con mayor gasto.';
+      warnings.add(Recommendation(
+        title: 'Gastos superan ingresos',
+        description: 'Este mes gastaste $deficit mas de lo que ingresaste.$cutHint',
+        type: RecommendationType.warning,
+      ));
+      return;
+    }
+
+    if (currentIncome <= 0) return;
+
+    if (_savingsRate >= _savingsTargetRate) {
+      positives.add(Recommendation(
+        title: 'Buen ritmo de ahorro',
+        description:
+            'Estas ahorrando el ${_savingsRate.toStringAsFixed(1)}% de tus ingresos '
+            '(${CurrencyFormatter.format(currentBalance)}). Sigue asi.',
+        type: RecommendationType.positive,
+      ));
+      _addEmergencyFundAdvice(tips);
+    } else {
+      final missing =
+          currentIncome * (_savingsTargetRate / 100) - currentBalance;
+      warnings.add(Recommendation(
+        title: 'Aumenta tu ahorro',
+        description:
+            'Estas ahorrando el ${_savingsRate.toStringAsFixed(1)}%. Te faltan '
+            '${CurrencyFormatter.format(missing)} al mes para llegar al 20% '
+            'que recomienda la regla 50/30/20.',
+        type: RecommendationType.warning,
+      ));
+    }
+  }
+
+  /// Meta de fondo de emergencia: N meses de gastos indispensables.
+  void _addEmergencyFundAdvice(List<Recommendation> tips) {
+    final costs = _groupCostsByCategory(currentTransactions);
+    double needs = 0;
+    for (final entry in costs.entries) {
+      if ((categorySections[entry.key] ?? '') == 'indispensable') {
+        needs += entry.value;
+      }
+    }
+    if (needs <= 0 || currentBalance <= 0) return;
+
+    final target = needs * _emergencyFundMonths;
+    final months = (target / currentBalance).ceil();
+    tips.add(Recommendation(
+      title: 'Construye tu fondo de emergencia',
+      description:
+          'Con tus gastos indispensables, un fondo de $_emergencyFundMonths meses '
+          'equivale a ${CurrencyFormatter.format(target)}. A tu ritmo actual de '
+          'ahorro lo alcanzas en ~$months meses.',
+      type: RecommendationType.neutral,
+    ));
+  }
+
+  void _addIncomeDropAdvice(List<Recommendation> warnings) {
+    if (!hasPreviousData || previousIncome <= 0) return;
+    if (incomeChangePercent >= -_incomeDropAlertPercent) return;
+    warnings.add(Recommendation(
+      title:
+          'Tus ingresos cayeron ${incomeChangePercent.abs().toStringAsFixed(0)}%',
+      description:
+          'Ingresaste ${CurrencyFormatter.format(incomeChange.abs())} menos que '
+          'el mes pasado. Ajusta tus gastos prescindibles a tu nueva realidad.',
+      type: RecommendationType.warning,
+    ));
+  }
+
+  void _addOverspendingAdvice(List<Recommendation> warnings) {
+    for (final alert in overspendingAlerts.take(2)) {
+      warnings.add(Recommendation(
+        title:
+            '${alert.displayName} aumento ${alert.changePercent.toStringAsFixed(0)}%',
+        description:
+            'Paso de ${CurrencyFormatter.format(alert.previousAmount)} a '
+            '${CurrencyFormatter.format(alert.currentAmount)} respecto al mes anterior.',
+        type: RecommendationType.warning,
+      ));
+    }
+  }
+
+  void _addInstallmentBurdenAdvice(List<Recommendation> warnings) {
+    if (monthlyInstallmentCommitment <= 0 || currentIncome <= 0) return;
+    final burden = (monthlyInstallmentCommitment / currentIncome) * 100;
+    if (burden <= _installmentBurdenLimit) return;
+    warnings.add(Recommendation(
+      title: 'Carga de cuotas alta',
+      description:
+          'Tus cuotas pactadas (${CurrencyFormatter.format(monthlyInstallmentCommitment)}) '
+          'consumen el ${burden.toStringAsFixed(0)}% de tus ingresos. Sobre el '
+          '${_installmentBurdenLimit.toStringAsFixed(0)}% conviene evitar nuevas compras en cuotas.',
+      type: RecommendationType.warning,
+    ));
+  }
+
+  void _addBudgetRuleAdvice(List<Recommendation> warnings) {
+    final rule = budgetRule;
+    if (rule.needsPercent > Rule503020.needsTarget + 10) {
+      warnings.add(Recommendation(
+        title: 'Gastos indispensables muy altos',
+        description:
+            'Representan el ${rule.needsPercent.toStringAsFixed(1)}% de tus ingresos. '
+            'Lo ideal es maximo 50%: renegocia cuentas fijas o busca aumentar ingresos.',
+        type: RecommendationType.warning,
+      ));
+    } else if (rule.wantsPercent > Rule503020.wantsTarget + 10) {
+      final topWants = _topDiscretionaryCategory;
+      final detail = topWants != null
+          ? ' La mayor parte va a ${topWants.displayName} '
+              '(${CurrencyFormatter.format(topWants.currentAmount)}).'
+          : '';
+      warnings.add(Recommendation(
+        title: 'Gastos prescindibles sobre el limite',
+        description:
+            'Tus deseos representan el ${rule.wantsPercent.toStringAsFixed(1)}% '
+            'de tus ingresos (ideal: 30%).$detail',
+        type: RecommendationType.warning,
+      ));
+    }
+  }
+
+  void _addCategoryConcentrationAdvice(List<Recommendation> tips) {
+    if (currentCost <= 0) return;
+    final costs = _groupCostsByCategory(currentTransactions);
+    String? topKey;
+    double topAmount = 0;
+    for (final entry in costs.entries) {
+      if (entry.value > topAmount) {
+        topAmount = entry.value;
+        topKey = entry.key;
+      }
+    }
+    if (topKey == null) return;
+    final share = (topAmount / currentCost) * 100;
+    if (share <= _categoryConcentrationLimit) return;
+    tips.add(Recommendation(
+      title: 'Gasto concentrado en una categoria',
+      description:
+          '${categoryDisplayNames[topKey] ?? topKey} concentra el '
+          '${share.toStringAsFixed(0)}% de tus gastos '
+          '(${CurrencyFormatter.format(topAmount)}). Diversificar te da mas margen de ajuste.',
+      type: RecommendationType.neutral,
+    ));
+  }
+
+  /// Gastos hormiga: muchas compras pequenas que sumadas pesan en el mes.
+  void _addAntExpensesAdvice(List<Recommendation> tips) {
+    if (currentIncome <= 0) return;
+    final smallThreshold = currentIncome * 0.015;
+    final smallCosts = currentTransactions
+        .where((t) =>
+            t.type == 'cost' && t.parentId == null && t.amount <= smallThreshold)
+        .toList();
+    if (smallCosts.length < _antExpenseMinCount) return;
+    final total = smallCosts.fold(0.0, (sum, t) => sum + t.amount);
+    if (total < currentIncome * 0.05) return;
+    tips.add(Recommendation(
+      title: 'Gastos hormiga detectados',
+      description:
+          '${smallCosts.length} gastos pequenos suman '
+          '${CurrencyFormatter.format(total)} este mes '
+          '(${((total / currentIncome) * 100).toStringAsFixed(0)}% de tus ingresos). '
+          'Son los mas faciles de recortar.',
+      type: RecommendationType.neutral,
+    ));
+  }
+
+  void _addImprovementAdvice(List<Recommendation> positives) {
+    if (!hasPreviousData || currentBalance <= previousBalance) return;
+    final improvement = currentBalance - previousBalance;
+    positives.add(Recommendation(
+      title: 'Mejoraste vs el mes anterior',
+      description:
+          'Tu balance mejoro ${CurrencyFormatter.format(improvement)} respecto '
+          'al mes pasado. Buen trabajo.',
+      type: RecommendationType.positive,
+    ));
   }
 
   Map<String, double> _groupCostsByCategory(List<TransactionItem> items) {

@@ -25,14 +25,20 @@ class ProjectedMonth {
     this.savingsConfirmed = false,
   });
 
-  /// Suma de las cuotas que vencen este mes.
-  double get projectedExpenses => dueInstallments.fold(
-        0.0,
-        (sum, i) => sum + i.dueAmountForMonth(year, month),
-      );
+  /// Suma de las cuotas que debo pagar este mes (compras, deudas, préstamos
+  /// recibidos).
+  double get projectedExpenses => dueInstallments
+      .where((i) => !i.isIncoming)
+      .fold(0.0, (sum, i) => sum + i.dueAmountForMonth(year, month));
+
+  /// Suma de las cuotas que me pagan este mes (dinero que presté).
+  double get projectedIncomes => dueInstallments
+      .where((i) => i.isIncoming)
+      .fold(0.0, (sum, i) => sum + i.dueAmountForMonth(year, month));
 
   /// Saldo proyectado al cierre del mes.
-  double get projectedBalance => carriedBalance - projectedExpenses;
+  double get projectedBalance =>
+      carriedBalance + projectedIncomes - projectedExpenses;
 
   bool get isDeficit => projectedBalance < 0;
 

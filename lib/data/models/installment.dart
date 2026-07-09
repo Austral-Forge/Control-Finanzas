@@ -1,6 +1,15 @@
-/// Una compra pactada en cuotas. Solo sirve como proyección: alimenta la
+/// Un compromiso pactado en cuotas. Solo sirve como proyección: alimenta la
 /// tarjeta del mes siguiente, no genera transacciones reales automáticamente.
+///
+/// [kind] distingue la dirección del dinero:
+/// - `pago`: compra o deuda propia, las cuotas son egresos futuros.
+/// - `recibido`: dinero que me prestaron, las cuotas que devuelvo son egresos.
+/// - `prestado`: dinero que presté, las cuotas que me pagan son ingresos.
 class Installment {
+  static const String kindPago = 'pago';
+  static const String kindPrestado = 'prestado';
+  static const String kindRecibido = 'recibido';
+
   final int? id;
   final String description;
   final String category;
@@ -10,6 +19,7 @@ class Installment {
   final int paidCount;
   final int startYear;
   final int startMonth;
+  final String kind;
 
   Installment({
     this.id,
@@ -21,7 +31,11 @@ class Installment {
     this.paidCount = 0,
     required this.startYear,
     required this.startMonth,
+    this.kind = kindPago,
   });
+
+  /// `true` si las cuotas de este compromiso son dinero que entra (me deben).
+  bool get isIncoming => kind == kindPrestado;
 
   /// Cuotas que aún faltan por pagar.
   int get remainingCount => installmentCount - paidCount;
@@ -63,6 +77,7 @@ class Installment {
         'paid_count': paidCount,
         'start_year': startYear,
         'start_month': startMonth,
+        'kind': kind,
       };
 
   factory Installment.fromMap(Map<String, dynamic> map) => Installment(
@@ -75,6 +90,7 @@ class Installment {
         paidCount: map['paid_count'] as int? ?? 0,
         startYear: map['start_year'] as int,
         startMonth: map['start_month'] as int,
+        kind: map['kind'] as String? ?? kindPago,
       );
 
   Installment copyWith({
@@ -87,6 +103,7 @@ class Installment {
     int? paidCount,
     int? startYear,
     int? startMonth,
+    String? kind,
   }) =>
       Installment(
         id: id ?? this.id,
@@ -98,5 +115,6 @@ class Installment {
         paidCount: paidCount ?? this.paidCount,
         startYear: startYear ?? this.startYear,
         startMonth: startMonth ?? this.startMonth,
+        kind: kind ?? this.kind,
       );
 }

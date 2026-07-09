@@ -17,11 +17,16 @@ import '../blocs/settings_state.dart';
 /// decide qué evento despachar y qué mensaje de confirmación mostrar.
 class TransactionFormSheet extends StatefulWidget {
   final TransactionItem? initial;
+
+  /// Tipo preseleccionado al crear (para los accesos rápidos +Ingreso/+Egreso).
+  final String? initialType;
+
   final void Function(TransactionItem transaction) onSubmit;
 
   const TransactionFormSheet({
     super.key,
     this.initial,
+    this.initialType,
     required this.onSubmit,
   });
 
@@ -32,6 +37,7 @@ class TransactionFormSheet extends StatefulWidget {
   static Future<void> show(
     BuildContext context, {
     TransactionItem? initial,
+    String? initialType,
     required void Function(TransactionItem transaction) onSubmit,
   }) {
     if (context.read<SettingsBloc>().state is! SettingsLoaded) {
@@ -46,7 +52,11 @@ class TransactionFormSheet extends StatefulWidget {
       ),
       builder: (_) => BlocProvider.value(
         value: context.read<SettingsBloc>(),
-        child: TransactionFormSheet(initial: initial, onSubmit: onSubmit),
+        child: TransactionFormSheet(
+          initial: initial,
+          initialType: initialType,
+          onSubmit: onSubmit,
+        ),
       ),
     );
   }
@@ -84,10 +94,19 @@ class _TransactionFormSheetState extends State<TransactionFormSheet> {
           initial.amount.toStringAsFixed(initial.amount % 1 == 0 ? 0 : 2);
       _descriptionController.text = initial.description;
     } else {
-      _type = TransactionType.income;
-      if (settings.incomeSources.isNotEmpty) {
-        _incomeSourceId = settings.incomeSources.first.id;
-        _category = settings.incomeSources.first.name;
+      _type = widget.initialType ?? TransactionType.income;
+      if (_isIncome) {
+        if (settings.incomeSources.isNotEmpty) {
+          _incomeSourceId = settings.incomeSources.first.id;
+          _category = settings.incomeSources.first.name;
+        }
+      } else {
+        if (settings.expenseCategories.isNotEmpty) {
+          _category = settings.expenseCategories.first.key;
+        }
+        if (settings.paymentMethods.isNotEmpty) {
+          _paymentMethodId = settings.paymentMethods.first.id;
+        }
       }
     }
   }

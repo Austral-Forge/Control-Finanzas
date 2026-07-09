@@ -7,6 +7,8 @@ import '../models/payment_method.dart';
 import '../models/expense_category.dart';
 import '../models/installment.dart';
 import '../models/savings_confirmation.dart';
+import '../models/bank_connection.dart';
+import '../models/payment_method_totals.dart';
 
 class FinanceRepositoryImpl implements FinanceRepository {
   final DbHelper _dbHelper = DbHelper.instance;
@@ -124,5 +126,31 @@ class FinanceRepositoryImpl implements FinanceRepository {
   @override
   Future<List<SavingsConfirmation>> getAllSavingsConfirmations() {
     return _dbHelper.getAllSavingsConfirmations();
+  }
+
+  @override
+  Future<List<BankConnection>> getBankConnections() {
+    return _dbHelper.getBankConnections();
+  }
+
+  @override
+  Future<void> addBankConnection(BankConnection connection) async {
+    await _dbHelper.insertBankConnection(connection);
+  }
+
+  @override
+  Future<void> deleteBankConnection(int id) async {
+    await _dbHelper.deleteBankConnection(id);
+  }
+
+  @override
+  Future<Map<int, PaymentMethodTotals>> getPaymentMethodTotals() {
+    return _dbHelper.getPaymentMethodTotals();
+  }
+
+  @override
+  Future<Map<String, Map<int, PaymentMethodTotals>>>
+      getMonthlyPaymentMethodTotals() {
+    return _dbHelper.getMonthlyPaymentMethodTotals();
   }
 }

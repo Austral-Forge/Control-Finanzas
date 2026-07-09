@@ -12,6 +12,8 @@ import '../../data/models/income_source.dart';
 import '../../data/models/payment_method.dart';
 import '../../data/models/expense_category.dart';
 import '../../data/models/installment.dart';
+import '../../data/services/app_lock_service.dart';
+import 'connections_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -23,11 +25,16 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _incomeController = TextEditingController();
   final _paymentController = TextEditingController();
+  final _lockService = AppLockService();
+  bool _lockEnabled = false;
 
   @override
   void initState() {
     super.initState();
     context.read<SettingsBloc>().add(LoadSettings());
+    _lockService.isEnabled().then((enabled) {
+      if (mounted) setState(() => _lockEnabled = enabled);
+    });
   }
 
   @override
@@ -75,6 +82,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 12),
           _buildThemeToggle(),
           const SizedBox(height: 32),
+          _buildSectionHeader('Seguridad', Icons.shield_outlined, AppTheme.bankTrust),
+          const SizedBox(height: 12),
+          _buildLockToggle(),
+          const SizedBox(height: 32),
           _buildSectionHeader('Fuentes de Ingreso', Icons.trending_up, AppTheme.income),
           const SizedBox(height: 12),
           _buildSimpleList(
@@ -111,6 +122,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             nameGetter: (item) => (item as PaymentMethod).name,
           ),
           const SizedBox(height: 32),
+          _buildSectionHeader('Conexiones', Icons.link_rounded, AppTheme.income),
+          const SizedBox(height: 12),
+          _buildConnectionsTile(state),
+          const SizedBox(height: 32),
           _buildSectionHeader('Categorias de Gasto', Icons.category_outlined, AppTheme.cost),
           const SizedBox(height: 8),
           Text(
@@ -120,10 +135,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 16),
           _buildEditableCategories(state.expenseCategories),
           const SizedBox(height: 32),
-          _buildSectionHeader('Cuotas / Pagos Pactados', Icons.receipt_long_outlined, AppTheme.savings),
+          _buildSectionHeader('Cuotas y Prestamos', Icons.receipt_long_outlined, AppTheme.savings),
           const SizedBox(height: 8),
           Text(
-            'Registra tus compromisos en cuotas para proyectar egresos futuros.',
+            'Registra compras en cuotas, dineros que prestaste (te deben) y '
+            'dineros que te prestaron (debes) para proyectar los proximos meses.',
             style: TextStyle(color: context.mutedTextColor, fontSize: 13),
           ),
           const SizedBox(height: 16),
@@ -134,6 +150,200 @@ class _SettingsScreenState extends State<SettingsScreen> {
               'Control Finanzas Card v1.0.0',
               style: TextStyle(color: context.mutedTextColor, fontSize: 12),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- Bank connections entry ---
+
+  Widget _buildConnectionsTile(SettingsLoaded state) {
+    final connectedCount = state.bankConnections.length;
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ConnectionsScreen()),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: context.surfaceColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: context.cardBorderColor),
+        ),
+        child: Row(children: [
+          const Icon(Icons.account_balance_outlined,
+              color: AppTheme.income, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Bancos y Casas Comerciales',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 2),
+              Text(
+                connectedCount > 0
+                    ? '$connectedCount institucion${connectedCount == 1 ? '' : 'es'} conectada${connectedCount == 1 ? '' : 's'}'
+                    : 'Vincula instituciones para medir sus ingresos y gastos',
+                style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+              ),
+            ]),
+          ),
+          Icon(Icons.chevron_right_rounded, color: context.mutedTextColor),
+        ]),
+      ),
+    );
+  }
+
+  // --- App lock (PIN) ---
+
+  Widget _buildLockToggle() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: context.cardBorderColor),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Row(children: [
+              Icon(
+                _lockEnabled ? Icons.lock_outline : Icons.lock_open_outlined,
+                color: AppTheme.bankTrust,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Bloqueo con PIN',
+                        style: TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w500)),
+                    Text(
+                      _lockEnabled
+                          ? 'Se pide un PIN de 4 digitos al abrir la app'
+                          : 'Protege tus finanzas al abrir la app',
+                      style: TextStyle(
+                          color: context.mutedTextColor, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ]),
+          ),
+          Switch(
+            value: _lockEnabled,
+            onChanged: (value) =>
+                value ? _showCreatePinDialog() : _showDisablePinDialog(),
+            activeThumbColor: AppTheme.bankTrust,
+            activeTrackColor: AppTheme.bankTrust.withValues(alpha: 0.4),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCreatePinDialog() {
+    final pinController = TextEditingController();
+    final confirmController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Crear PIN'),
+        content: Form(
+          key: formKey,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextFormField(
+              controller: pinController,
+              autofocus: true,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: AppLockService.pinLength,
+              decoration: const InputDecoration(labelText: 'PIN de 4 digitos'),
+              validator: (v) => AppLockService.isValidPinFormat(v ?? '')
+                  ? null
+                  : 'Debe tener 4 digitos numericos',
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: confirmController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: AppLockService.pinLength,
+              decoration: const InputDecoration(labelText: 'Repite el PIN'),
+              validator: (v) =>
+                  v == pinController.text ? null : 'Los PIN no coinciden',
+            ),
+          ]),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancelar',
+                style: TextStyle(color: context.secondaryTextColor)),
+          ),
+          TextButton(
+            onPressed: () async {
+              if (!formKey.currentState!.validate()) return;
+              await _lockService.setPin(pinController.text);
+              if (!ctx.mounted || !mounted) return;
+              Navigator.pop(ctx);
+              setState(() => _lockEnabled = true);
+              ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Bloqueo con PIN activado')));
+            },
+            child: const Text('Activar', style: TextStyle(color: AppTheme.primary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDisablePinDialog() {
+    final pinController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Desactivar Bloqueo'),
+        content: TextField(
+          controller: pinController,
+          autofocus: true,
+          obscureText: true,
+          keyboardType: TextInputType.number,
+          maxLength: AppLockService.pinLength,
+          decoration: const InputDecoration(labelText: 'PIN actual'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancelar',
+                style: TextStyle(color: context.secondaryTextColor)),
+          ),
+          TextButton(
+            onPressed: () async {
+              final ok = await _lockService.verifyPin(pinController.text);
+              if (!ctx.mounted || !mounted) return;
+              if (!ok) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('PIN incorrecto')));
+                return;
+              }
+              await _lockService.disable();
+              if (!ctx.mounted || !mounted) return;
+              Navigator.pop(ctx);
+              setState(() => _lockEnabled = false);
+              ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Bloqueo con PIN desactivado')));
+            },
+            child: const Text('Desactivar',
+                style: TextStyle(color: AppTheme.cost, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -460,8 +670,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  /// Etiqueta y color según la dirección del dinero de la cuota.
+  static (String, Color)? _kindBadge(Installment inst) {
+    switch (inst.kind) {
+      case Installment.kindPrestado:
+        return ('Te deben', AppTheme.income);
+      case Installment.kindRecibido:
+        return ('Debes', AppTheme.retailWarm);
+      default:
+        return null;
+    }
+  }
+
   Widget _buildInstallmentTile(Installment inst) {
     final progress = inst.paidCount / inst.installmentCount;
+    final badge = _kindBadge(inst);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: GestureDetector(
@@ -472,6 +695,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Text(inst.description,
                   style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
             ),
+            if (badge != null)
+              Container(
+                margin: const EdgeInsets.only(right: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: badge.$2.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(badge.$1,
+                    style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: badge.$2)),
+              ),
             IconButton(
               icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.cost),
               onPressed: () => _confirmDeleteInstallment(inst),
@@ -482,7 +719,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Text('${CurrencyFormatter.format(inst.monthlyAmount)} x ${inst.installmentCount} cuotas',
                 style: TextStyle(color: context.secondaryTextColor, fontSize: 12)),
-            Text('${inst.paidCount}/${inst.installmentCount} pagadas',
+            Text(
+                '${inst.paidCount}/${inst.installmentCount} ${inst.isIncoming ? 'cobradas' : 'pagadas'}',
                 style: TextStyle(color: context.mutedTextColor, fontSize: 12)),
           ]),
           const SizedBox(height: 6),
@@ -522,8 +760,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final now = DateTime.now();
     int startYear = existing?.startYear ?? now.year;
     int startMonth = existing?.startMonth ?? now.month;
+    String kind = existing?.kind ?? Installment.kindPago;
 
     final formKey = GlobalKey<FormState>();
+
+    const kindOptions = [
+      (Installment.kindPago, 'Compra / Deuda', 'Pagas cuotas'),
+      (Installment.kindPrestado, 'Preste dinero', 'Te deben cuotas'),
+      (Installment.kindRecibido, 'Me prestaron', 'Debes cuotas'),
+    ];
 
     showModalBottomSheet(
       context: context,
@@ -555,6 +800,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ]),
                     const SizedBox(height: 20),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: kindOptions.map((option) {
+                        final isSelected = kind == option.$1;
+                        return ChoiceChip(
+                          label: Column(mainAxisSize: MainAxisSize.min, children: [
+                            Text(option.$2,
+                                style: const TextStyle(
+                                    fontSize: 12, fontWeight: FontWeight.w600)),
+                            Text(option.$3,
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    color: context.mutedTextColor)),
+                          ]),
+                          selected: isSelected,
+                          selectedColor:
+                              AppTheme.primary.withValues(alpha: 0.18),
+                          onSelected: (_) =>
+                              setSheetState(() => kind = option.$1),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
                     TextFormField(
                       controller: descController,
                       decoration: const InputDecoration(
@@ -672,6 +941,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             paidCount: int.parse(paidController.text),
                             startYear: startYear,
                             startMonth: startMonth,
+                            kind: kind,
                           );
                           if (isEditing) {
                             context.read<SettingsBloc>().add(

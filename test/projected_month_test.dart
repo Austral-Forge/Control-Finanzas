@@ -9,6 +9,7 @@ void main() {
     int paidCount = 0,
     int startYear = 2026,
     int startMonth = 4,
+    String kind = Installment.kindPago,
   }) =>
       Installment(
         description: 'Cuota test',
@@ -18,6 +19,7 @@ void main() {
         paidCount: paidCount,
         startYear: startYear,
         startMonth: startMonth,
+        kind: kind,
       );
 
   group('ProjectedMonth', () {
@@ -71,6 +73,22 @@ void main() {
       );
       expect(pm.projectedBalance, -70000);
       expect(pm.isDeficit, isTrue);
+    });
+
+    test('cuota prestada suma al balance como ingreso proyectado', () {
+      final pm = ProjectedMonth.next(
+        lastYear: 2026, lastMonth: 6,
+        carriedBalance: 100000,
+        installments: [
+          cuota(monthlyAmount: 40000, startYear: 2026, startMonth: 5,
+              installmentCount: 6, kind: Installment.kindPrestado),
+          cuota(monthlyAmount: 25000, startYear: 2026, startMonth: 5,
+              installmentCount: 6, kind: Installment.kindRecibido),
+        ],
+      );
+      expect(pm.projectedIncomes, 40000);
+      expect(pm.projectedExpenses, 25000);
+      expect(pm.projectedBalance, 115000);
     });
 
     test('cruce de anio funciona correctamente', () {

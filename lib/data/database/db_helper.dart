@@ -8,6 +8,8 @@ import '../models/payment_method.dart';
 import '../models/expense_category.dart';
 import '../models/installment.dart';
 import '../models/savings_confirmation.dart';
+import '../models/bank_connection.dart';
+import '../models/payment_method_totals.dart';
 
 class DbHelper {
   static final DbHelper instance = DbHelper._init();
@@ -22,6 +24,7 @@ class DbHelper {
   static List<Map<String, dynamic>>? _webExpenseCategories;
   static List<Map<String, dynamic>>? _webInstallments;
   static List<Map<String, dynamic>>? _webSavingsConfirmations;
+  static List<Map<String, dynamic>>? _webBankConnections;
 
   DbHelper._init();
 
@@ -40,7 +43,7 @@ class DbHelper {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 6,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -91,6 +94,7 @@ class DbHelper {
 
     await db.execute(_createInstallmentsTableSql);
     await db.execute(_createSavingsConfirmationsTableSql);
+    await db.execute(_createBankConnectionsTableSql);
 
     if (!skipSampleSeeding) {
       await _seedExpenseCategories(db);
@@ -110,6 +114,7 @@ class DbHelper {
       paid_count INTEGER NOT NULL DEFAULT 0,
       start_year INTEGER NOT NULL,
       start_month INTEGER NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'pago',
       FOREIGN KEY (payment_method_id) REFERENCES payment_methods(id)
     )
   ''';
@@ -123,6 +128,19 @@ class DbHelper {
       confirmed_amount REAL NOT NULL,
       confirmed_at TEXT NOT NULL,
       UNIQUE(year, month)
+    )
+  ''';
+
+  static const String _createBankConnectionsTableSql = '''
+    CREATE TABLE bank_connections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      institution_key TEXT NOT NULL UNIQUE,
+      institution_name TEXT NOT NULL,
+      institution_type TEXT NOT NULL,
+      payment_method_id INTEGER,
+      sync_mode TEXT NOT NULL DEFAULT 'manual',
+      connected_at TEXT NOT NULL,
+      FOREIGN KEY (payment_method_id) REFERENCES payment_methods(id)
     )
   ''';
 
@@ -203,6 +221,15 @@ class DbHelper {
 
     if (oldVersion < 4) {
       await db.execute(_createSavingsConfirmationsTableSql);
+    }
+
+    if (oldVersion < 5) {
+      await db.execute(_createBankConnectionsTableSql);
+    }
+
+    if (oldVersion < 6) {
+      await db.execute(
+          "ALTER TABLE installments ADD COLUMN kind TEXT NOT NULL DEFAULT 'pago'");
     }
   }
 
@@ -304,6 +331,7 @@ class DbHelper {
 
     _webInstallments = [];
     _webSavingsConfirmations = [];
+    _webBankConnections = [];
 
     _webDb = [];
 
@@ -743,6 +771,140 @@ class DbHelper {
       final db = await instance.database;
       return await db.insert('savings_confirmations', confirmation.toMap(),
           conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+  }
+
+  // --- Bank Connections CRUD ---
+
+  Future<List<BankConnection>> getBankConnections() async {
+    if (kIsWeb) {
+      _initWebDb();
+      return _webBankConnections!.map((m) => BankConnection.fromMap(m)).toList();
+    } else {
+      final db = await instance.database;
+      final result =
+          await db.query('bank_connections', orderBy: 'institution_name ASC');
+      return result.map((m) => BankConnection.fromMap(m)).toList();
+    }
+  }
+
+  Future<int> insertBankConnection(BankConnection connection) async {
+    if (kIsWeb) {
+      _initWebDb();
+      final newId = _nextWebId(_webBankConnections!);
+      _webBankConnections!.add(connection.toMap()..['id'] = newId);
+      return newId;
+    } else {
+      final db = await instance.database;
+      return await db.insert('bank_connections', connection.toMap());
+    }
+  }
+
+  Future<int> deleteBankConnection(int id) async {
+    if (kIsWeb) {
+      _initWebDb();
+      _webBankConnections!.removeWhere((e) => e['id'] == id);
+      return 1;
+    } else {
+      final db = await instance.database;
+      return await db.delete('bank_connections', where: 'id = ?', whereArgs: [id]);
+    }
+  }
+
+  /// Totales históricos de ingresos y gastos agrupados por medio de pago.
+  /// Permite medir la actividad de cada institución vinculada.
+  Future<Map<int, PaymentMethodTotals>> getPaymentMethodTotals() async {
+    if (kIsWeb) {
+      _initWebDb();
+      final totals = <int, List<double>>{};
+      for (final row in _webDb!) {
+        if (row['parent_id'] != null || row['payment_method_id'] == null) {
+          continue;
+        }
+        final methodId = row['payment_method_id'] as int;
+        final amount = (row['amount'] as num).toDouble();
+        final entry = totals.putIfAbsent(methodId, () => [0.0, 0.0]);
+        if (row['type'] == 'income') {
+          entry[0] += amount;
+        } else {
+          entry[1] += amount;
+        }
+      }
+      return totals.map((id, sums) =>
+          MapEntry(id, PaymentMethodTotals(income: sums[0], cost: sums[1])));
+    } else {
+      final db = await instance.database;
+      final result = await db.rawQuery('''
+        SELECT
+          payment_method_id,
+          SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as total_income,
+          SUM(CASE WHEN type = 'cost' THEN amount ELSE 0 END) as total_cost
+        FROM transactions
+        WHERE parent_id IS NULL AND payment_method_id IS NOT NULL
+        GROUP BY payment_method_id
+      ''');
+
+      return {
+        for (final row in result)
+          row['payment_method_id'] as int: PaymentMethodTotals(
+            income: (row['total_income'] as num?)?.toDouble() ?? 0.0,
+            cost: (row['total_cost'] as num?)?.toDouble() ?? 0.0,
+          ),
+      };
+    }
+  }
+
+  /// Totales de ingresos y gastos por medio de pago, desglosados por mes.
+  /// Clave externa: 'yyyy-MM'; clave interna: id del medio de pago.
+  Future<Map<String, Map<int, PaymentMethodTotals>>>
+      getMonthlyPaymentMethodTotals() async {
+    if (kIsWeb) {
+      _initWebDb();
+      final totals = <String, Map<int, List<double>>>{};
+      for (final row in _webDb!) {
+        if (row['parent_id'] != null || row['payment_method_id'] == null) {
+          continue;
+        }
+        final monthKey = (row['date'] as String).substring(0, 7);
+        final methodId = row['payment_method_id'] as int;
+        final amount = (row['amount'] as num).toDouble();
+        final entry = totals
+            .putIfAbsent(monthKey, () => {})
+            .putIfAbsent(methodId, () => [0.0, 0.0]);
+        if (row['type'] == 'income') {
+          entry[0] += amount;
+        } else {
+          entry[1] += amount;
+        }
+      }
+      return totals.map((monthKey, byMethod) => MapEntry(
+            monthKey,
+            byMethod.map((id, sums) => MapEntry(
+                id, PaymentMethodTotals(income: sums[0], cost: sums[1]))),
+          ));
+    } else {
+      final db = await instance.database;
+      final result = await db.rawQuery('''
+        SELECT
+          SUBSTR(date, 1, 7) as month_key,
+          payment_method_id,
+          SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as total_income,
+          SUM(CASE WHEN type = 'cost' THEN amount ELSE 0 END) as total_cost
+        FROM transactions
+        WHERE parent_id IS NULL AND payment_method_id IS NOT NULL
+        GROUP BY month_key, payment_method_id
+      ''');
+
+      final totals = <String, Map<int, PaymentMethodTotals>>{};
+      for (final row in result) {
+        final monthKey = row['month_key'] as String;
+        totals.putIfAbsent(monthKey, () => {})[row['payment_method_id'] as int] =
+            PaymentMethodTotals(
+          income: (row['total_income'] as num?)?.toDouble() ?? 0.0,
+          cost: (row['total_cost'] as num?)?.toDouble() ?? 0.0,
+        );
+      }
+      return totals;
     }
   }
 

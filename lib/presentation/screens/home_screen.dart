@@ -1,7 +1,5 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:fl_chart/fl_chart.dart';
 import '../blocs/finance_bloc.dart';
 import '../blocs/finance_event.dart';
 import '../blocs/finance_state.dart';
@@ -70,11 +68,6 @@ class _HomeScreenState extends State<HomeScreen> {
           return const SizedBox();
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openAddTransaction,
-        icon: const Icon(Icons.add, size: 20),
-        label: const Text('Nueva Transaccion'),
-      ),
     );
   }
 
@@ -112,26 +105,32 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showSavingsDialogIfNeeded(FinanceLoaded state) {
     if (_savingsDialogShown || !state.hasPendingSavingsConfirmation) return;
     _savingsDialogShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _openSavingsConfirmation(state);
+    });
+  }
+
+  /// Validación para empezar el mes: el usuario confirma cuánto ahorro real
+  /// arrastra antes de partir el mes siguiente.
+  void _openSavingsConfirmation(FinanceLoaded state) {
     final totalSavings =
         state.summaries.fold<double>(0.0, (sum, s) => sum + s.balance);
     final now = DateTime.now();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      SavingsConfirmationSheet.show(
-        context,
-        calculatedSavings: totalSavings,
-        year: now.year,
-        month: now.month,
-        onConfirm: (amount) {
-          context.read<FinanceBloc>().add(ConfirmSavings(
-                year: now.year,
-                month: now.month,
-                originalAmount: totalSavings,
-                confirmedAmount: amount,
-              ));
-        },
-      );
-    });
+    SavingsConfirmationSheet.show(
+      context,
+      calculatedSavings: totalSavings,
+      year: now.year,
+      month: now.month,
+      onConfirm: (amount) {
+        context.read<FinanceBloc>().add(ConfirmSavings(
+              year: now.year,
+              month: now.month,
+              originalAmount: totalSavings,
+              confirmedAmount: amount,
+            ));
+      },
+    );
   }
 
   Widget _buildContent(FinanceLoaded state) {
@@ -167,42 +166,45 @@ class _HomeScreenState extends State<HomeScreen> {
     _scheduleInitialPage(totalCards);
 
     final currentIndex = _page.round().clamp(0, totalCards - 1);
-    final isProjectedSelected = currentIndex == projections.length;
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-          child: BalanceCard(totalBalance: totalSavings),
-        ),
-        const SizedBox(height: 20),
-        _buildCarouselHeader(currentIndex, totalCards),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 280,
-          child: PageView.builder(
-            controller: _pageController,
-            itemCount: totalCards,
-            itemBuilder: (context, index) {
-              if (index < projections.length) {
-                return _build3DCard(index, projections[index]);
-              }
-              return _build3DProjectedCard(index, projected);
-            },
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.only(bottom: 30),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+            child: BalanceCard(totalBalance: totalSavings),
           ),
-        ),
-        const SizedBox(height: 8),
-        _buildPageDots(totalCards, currentIndex),
-        const SizedBox(height: 16),
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 90),
-            child: isProjectedSelected
-                ? _ProjectedMonthChart(projected: projected)
-                : _MonthChart(projection: projections[currentIndex]),
+          const SizedBox(height: 20),
+          _buildCarouselHeader(currentIndex, totalCards),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 290,
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: totalCards,
+              itemBuilder: (context, index) {
+                if (index < projections.length) {
+                  return _build3DCard(
+                      index, _MonthCarouselCard(projection: projections[index]));
+                }
+                return _build3DCard(
+                  index,
+                  _ProjectedCarouselCard(
+                    projected: projected,
+                    onConfirmPending: () => _openSavingsConfirmation(state),
+                  ),
+                );
+              },
+            ),
           ),
-        ),
-      ],
+          const SizedBox(height: 8),
+          _buildPageDots(totalCards, currentIndex),
+          const SizedBox(height: 20),
+          _buildQuickAddButtons(),
+        ],
+      ),
     );
   }
 
@@ -245,7 +247,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _build3DCard(int index, MonthlyProjection projection) {
+  Widget _build3DCard(int index, Widget card) {
     final distance = index - _page;
     final rotationY = distance * 0.4;
     final scale = 1 - (distance.abs() * 0.15).clamp(0.0, 0.3);
@@ -259,31 +261,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Transform(
       alignment: Alignment.center,
       transform: scaled,
-      child: Opacity(
-        opacity: opacity.toDouble(),
-        child: _MonthCarouselCard(projection: projection),
-      ),
-    );
-  }
-
-  Widget _build3DProjectedCard(int index, ProjectedMonth projected) {
-    final distance = index - _page;
-    final rotationY = distance * 0.4;
-    final scale = 1 - (distance.abs() * 0.15).clamp(0.0, 0.3);
-    final opacity = (1 - (distance.abs() * 0.3)).clamp(0.4, 1.0);
-
-    final transform = Matrix4.identity()
-      ..setEntry(3, 2, 0.002)
-      ..rotateY(rotationY);
-    final scaled = transform * Matrix4.diagonal3Values(scale, scale, 1.0);
-
-    return Transform(
-      alignment: Alignment.center,
-      transform: scaled,
-      child: Opacity(
-        opacity: opacity.toDouble(),
-        child: _ProjectedCarouselCard(projected: projected),
-      ),
+      child: Opacity(opacity: opacity.toDouble(), child: card),
     );
   }
 
@@ -308,9 +286,38 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openAddTransaction() {
+  /// Entrada rápida: lo más importante es registrar un movimiento en 2 toques.
+  Widget _buildQuickAddButtons() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: [
+          Expanded(
+            child: _QuickAddButton(
+              label: 'Ingreso',
+              icon: Icons.arrow_downward_rounded,
+              color: AppTheme.income,
+              onTap: () => _openAddTransaction(TransactionType.income),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _QuickAddButton(
+              label: 'Egreso',
+              icon: Icons.arrow_upward_rounded,
+              color: AppTheme.cost,
+              onTap: () => _openAddTransaction(TransactionType.cost),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openAddTransaction(String type) {
     TransactionFormSheet.show(
       context,
+      initialType: type,
       onSubmit: (transaction) {
         context.read<FinanceBloc>().add(AddTransaction(transaction: transaction));
         ScaffoldMessenger.of(context).showSnackBar(
@@ -325,7 +332,43 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// Tarjeta de un mes dentro del carrusel 3D.
+class _QuickAddButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _QuickAddButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 56,
+      child: ElevatedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 20, color: color),
+        label: Text('+ $label',
+            style: TextStyle(
+                fontSize: 15, fontWeight: FontWeight.w700, color: color)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color.withValues(alpha: 0.12),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: color.withValues(alpha: 0.35)),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tarjeta de un mes: el resumen macro Ingresos − Egresos = Ahorro/Pérdida.
 class _MonthCarouselCard extends StatelessWidget {
   final MonthlyProjection projection;
 
@@ -334,9 +377,10 @@ class _MonthCarouselCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final summary = projection.summary;
-    final isDeficit = summary.isDeficit;
+    final balance = summary.balance;
+    final isDeficit = balance < 0;
     final monthName = CurrencyFormatter.getMonthName(summary.month);
-    final monthBalance = projection.effectiveIncome - summary.totalCost;
+    final balanceColor = isDeficit ? AppTheme.cost : AppTheme.income;
 
     return GestureDetector(
       onTap: () => Navigator.push(
@@ -348,14 +392,14 @@ class _MonthCarouselCard extends StatelessWidget {
       ),
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(22),
         decoration: BoxDecoration(
           color: context.surfaceColor,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: context.cardBorderColor),
           boxShadow: [
             BoxShadow(
-              color: AppTheme.primary.withValues(alpha: context.isDark ? 0.15 : 0.08),
+              color: balanceColor.withValues(alpha: context.isDark ? 0.12 : 0.07),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -373,36 +417,40 @@ class _MonthCarouselCard extends StatelessWidget {
                 _StatusBadge(isDeficit: isDeficit),
               ],
             ),
-            const SizedBox(height: 14),
-            _CardRow(label: 'Ingresos', value: summary.totalIncome, color: AppTheme.income),
-            if (projection.hasCarriedSavings) ...[
-              const SizedBox(height: 4),
-              _CardRow(
-                  label: '+ Ahorro anterior',
-                  value: projection.carriedSavings,
-                  color: AppTheme.savings),
-            ],
-            const SizedBox(height: 4),
-            _CardRow(label: 'Egresos', value: summary.totalCost, color: AppTheme.cost),
+            const SizedBox(height: 20),
+            _CardRow(
+                label: 'Ingresos',
+                value: summary.totalIncome,
+                color: AppTheme.income),
+            const SizedBox(height: 10),
+            _CardRow(
+                label: 'Egresos',
+                value: summary.totalCost,
+                color: AppTheme.cost),
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 12),
               child: Divider(color: context.dividerColor, height: 1),
             ),
-            _CardTotalRow(
-                label: 'Ingreso Efectivo',
-                value: projection.effectiveIncome,
-                color: AppTheme.income),
-            const SizedBox(height: 4),
-            _CardTotalRow(
-              label: 'Balance del Mes',
-              value: monthBalance,
-              color: monthBalance < 0 ? AppTheme.cost : AppTheme.income,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(isDeficit ? 'Perdida' : 'Ahorro',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: context.primaryTextColor)),
+                Text(CurrencyFormatter.format(balance.abs()),
+                    style: TextStyle(
+                        color: balanceColor,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 20)),
+              ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 14),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Text('Ver detalle',
+                Text('Ver en que se fue',
                     style: TextStyle(
                         color: AppTheme.primary,
                         fontWeight: FontWeight.w600,
@@ -434,7 +482,7 @@ class _StatusBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        isDeficit ? 'Deficit' : 'Ahorro',
+        isDeficit ? 'Perdida' : 'Ahorro',
         style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 11),
       ),
     );
@@ -454,458 +502,143 @@ class _CardRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label,
-            style: TextStyle(color: context.secondaryTextColor, fontSize: 13)),
+            style: TextStyle(color: context.secondaryTextColor, fontSize: 14)),
         Text(CurrencyFormatter.format(value),
-            style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 13)),
+            style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 15)),
       ],
     );
   }
 }
 
-class _CardTotalRow extends StatelessWidget {
-  final String label;
-  final double value;
-  final Color color;
-
-  const _CardTotalRow(
-      {required this.label, required this.value, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label,
-            style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-                color: context.primaryTextColor)),
-        Text(CurrencyFormatter.format(value),
-            style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 15)),
-      ],
-    );
-  }
-}
-
-/// Gráfico de barras del mes: ingresos, ahorro previo, egresos y ahorro potencial.
-class _MonthChart extends StatelessWidget {
-  final MonthlyProjection projection;
-
-  const _MonthChart({required this.projection});
-
-  List<String> get _labels => projection.hasCarriedSavings
-      ? const ['Ingresos', 'Ahorro\nAnt.', 'Egresos', 'Ahorro\nPot.']
-      : const ['Ingresos', 'Egresos', 'Ahorro\nPot.'];
-
-  List<String> get _tooltipLabels => projection.hasCarriedSavings
-      ? const ['Ingresos', 'Ahorro Ant.', 'Egresos', 'Ahorro Pot.']
-      : const ['Ingresos', 'Egresos', 'Ahorro Pot.'];
-
-  @override
-  Widget build(BuildContext context) {
-    final summary = projection.summary;
-    final potential = projection.savingsPotential;
-    final monthName = CurrencyFormatter.getMonthName(summary.month);
-
-    final maxValue = [
-      summary.totalIncome,
-      summary.totalCost,
-      projection.carriedSavings,
-      potential.abs(),
-    ].reduce(math.max);
-    final ceiling = maxValue > 0 ? maxValue * 1.2 : 1000.0;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: context.cardBorderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Resumen $monthName', style: context.textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text('Ganancia vs Perdidas y Ahorro Potencial',
-              style: TextStyle(color: context.mutedTextColor, fontSize: 12)),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 200,
-            child: BarChart(
-              BarChartData(
-                alignment: BarChartAlignment.spaceAround,
-                maxY: ceiling,
-                barTouchData: BarTouchData(
-                  touchTooltipData: BarTouchTooltipData(
-                    getTooltipItem: (group, groupIndex, rod, rodIndex) =>
-                        BarTooltipItem(
-                      '${_tooltipLabels[groupIndex]}\n${CurrencyFormatter.format(rod.toY)}',
-                      const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12),
-                    ),
-                  ),
-                ),
-                titlesData: FlTitlesData(
-                  show: true,
-                  leftTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        final idx = value.toInt();
-                        if (idx < 0 || idx >= _labels.length) {
-                          return const SizedBox();
-                        }
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(_labels[idx],
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  fontSize: 10, color: context.mutedTextColor)),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                gridData: const FlGridData(show: false),
-                barGroups: _buildBarGroups(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _ChartLegend(
-                label: 'Tasa Ahorro',
-                value: '${(projection.savingsRate * 100).toStringAsFixed(1)}%',
-                color: potential >= 0 ? AppTheme.income : AppTheme.cost,
-              ),
-              _ChartLegend(
-                label: 'Ahorro Pot.',
-                value: CurrencyFormatter.format(potential),
-                color: potential >= 0 ? AppTheme.savings : AppTheme.cost,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<BarChartGroupData> _buildBarGroups() {
-    final summary = projection.summary;
-    final potential = projection.savingsPotential;
-
-    final bars = <_Bar>[
-      _Bar(summary.totalIncome, AppTheme.income),
-      if (projection.hasCarriedSavings)
-        _Bar(projection.carriedSavings, AppTheme.savings),
-      _Bar(summary.totalCost, AppTheme.cost),
-      _Bar(
-        potential.abs(),
-        potential >= 0 ? AppTheme.primary : AppTheme.cost.withValues(alpha: 0.6),
-      ),
-    ];
-
-    return [
-      for (var i = 0; i < bars.length; i++)
-        BarChartGroupData(x: i, barRods: [
-          BarChartRodData(
-            toY: bars[i].value,
-            color: bars[i].color,
-            width: 28,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-          ),
-        ]),
-    ];
-  }
-}
-
-class _Bar {
-  final double value;
-  final Color color;
-  const _Bar(this.value, this.color);
-}
-
-class _ChartLegend extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-
-  const _ChartLegend(
-      {required this.label, required this.value, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(value,
-            style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 15)),
-        const SizedBox(height: 2),
-        Text(label,
-            style: TextStyle(color: context.mutedTextColor, fontSize: 11)),
-      ],
-    );
-  }
-}
-
-/// Tarjeta del mes proyectado (último slot del carrusel).
+/// Tarjeta del mes proyectado (último slot del carrusel). Al tocarla con la
+/// confirmación pendiente se abre la validación para empezar el mes.
 class _ProjectedCarouselCard extends StatelessWidget {
   final ProjectedMonth projected;
+  final VoidCallback onConfirmPending;
 
-  const _ProjectedCarouselCard({required this.projected});
+  const _ProjectedCarouselCard({
+    required this.projected,
+    required this.onConfirmPending,
+  });
 
   @override
   Widget build(BuildContext context) {
     final monthName = CurrencyFormatter.getMonthName(projected.month);
 
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: AppTheme.primary.withValues(alpha: 0.4),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.primary.withValues(alpha: context.isDark ? 0.12 : 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+    return GestureDetector(
+      onTap: projected.savingsConfirmed ? null : onConfirmPending,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          color: context.surfaceColor,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: AppTheme.primary.withValues(alpha: 0.4),
+            width: 1.5,
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('$monthName ${projected.year}',
-                  style: context.textTheme.titleLarge),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: projected.savingsConfirmed
-                      ? AppTheme.primary.withValues(alpha: 0.12)
-                      : AppTheme.cost.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  projected.savingsConfirmed
-                      ? 'Proyectado'
-                      : 'Pendiente confirmar',
-                  style: TextStyle(
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.primary.withValues(alpha: context.isDark ? 0.12 : 0.06),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('$monthName ${projected.year}',
+                    style: context.textTheme.titleLarge),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
                     color: projected.savingsConfirmed
-                        ? AppTheme.primary
-                        : AppTheme.cost,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 11,
+                        ? AppTheme.primary.withValues(alpha: 0.12)
+                        : AppTheme.cost.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    projected.savingsConfirmed
+                        ? 'Proyectado'
+                        : 'Pendiente confirmar',
+                    style: TextStyle(
+                      color: projected.savingsConfirmed
+                          ? AppTheme.primary
+                          : AppTheme.cost,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _CardRow(
-              label: 'Saldo arrastrado',
-              value: projected.carriedBalance,
-              color: projected.carriedBalance >= 0
-                  ? AppTheme.income
-                  : AppTheme.cost),
-          if (projected.hasInstallments) ...[
-            const SizedBox(height: 4),
-            ...projected.dueInstallments.map((inst) => Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: _CardRow(
-                      label: '- ${inst.description}',
-                      value: inst.dueAmountForMonth(
-                          projected.year, projected.month),
-                      color: AppTheme.cost),
-                )),
-            const SizedBox(height: 2),
+              ],
+            ),
+            const SizedBox(height: 16),
             _CardRow(
-                label: 'Total cuotas',
+                label: 'Saldo arrastrado',
+                value: projected.carriedBalance,
+                color: projected.carriedBalance >= 0
+                    ? AppTheme.income
+                    : AppTheme.cost),
+            if (projected.projectedIncomes > 0) ...[
+              const SizedBox(height: 6),
+              _CardRow(
+                  label: '+ Cuotas por cobrar',
+                  value: projected.projectedIncomes,
+                  color: AppTheme.income),
+            ],
+            const SizedBox(height: 6),
+            _CardRow(
+                label: '- Cuotas por pagar',
                 value: projected.projectedExpenses,
                 color: AppTheme.cost),
-          ],
-          if (!projected.hasInstallments) ...[
-            const SizedBox(height: 4),
-            _CardRow(
-                label: 'Cuotas del mes', value: 0, color: AppTheme.cost),
-          ],
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Divider(color: context.dividerColor, height: 1),
-          ),
-          _CardTotalRow(
-            label: 'Balance Proyectado',
-            value: projected.projectedBalance,
-            color: projected.isDeficit ? AppTheme.cost : AppTheme.income,
-          ),
-          const Spacer(),
-          Center(
-            child: Text(
-              projected.hasInstallments
-                  ? '${projected.dueInstallments.length} cuota(s) pendiente(s)'
-                  : 'Sin cuotas comprometidas',
-              style: TextStyle(color: context.mutedTextColor, fontSize: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Divider(color: context.dividerColor, height: 1),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Gráfico de barras para el mes proyectado.
-class _ProjectedMonthChart extends StatelessWidget {
-  final ProjectedMonth projected;
-
-  const _ProjectedMonthChart({required this.projected});
-
-  @override
-  Widget build(BuildContext context) {
-    final monthName = CurrencyFormatter.getMonthName(projected.month);
-    final carried = projected.carriedBalance;
-    final expenses = projected.projectedExpenses;
-    final balance = projected.projectedBalance;
-
-    final maxValue = [carried.abs(), expenses, balance.abs()]
-        .reduce(math.max);
-    final ceiling = maxValue > 0 ? maxValue * 1.2 : 1000.0;
-
-    final labels = ['Saldo\nAnterior', 'Cuotas\nProyect.', 'Balance\nProyect.'];
-    final tooltipLabels = ['Saldo Anterior', 'Cuotas Proyectadas', 'Balance Proyectado'];
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: context.cardBorderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Proyeccion $monthName ${projected.year}',
-              style: context.textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text('Saldo arrastrado vs Cuotas comprometidas',
-              style: TextStyle(color: context.mutedTextColor, fontSize: 12)),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 200,
-            child: BarChart(
-              BarChartData(
-                alignment: BarChartAlignment.spaceAround,
-                maxY: ceiling,
-                barTouchData: BarTouchData(
-                  touchTooltipData: BarTouchTooltipData(
-                    getTooltipItem: (group, groupIndex, rod, rodIndex) =>
-                        BarTooltipItem(
-                      '${tooltipLabels[groupIndex]}\n${CurrencyFormatter.format(rod.toY)}',
-                      const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12),
-                    ),
-                  ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Balance Proyectado',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: context.primaryTextColor)),
+                Text(CurrencyFormatter.format(projected.projectedBalance),
+                    style: TextStyle(
+                        color: projected.isDeficit
+                            ? AppTheme.cost
+                            : AppTheme.income,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 20)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: Text(
+                projected.savingsConfirmed
+                    ? (projected.hasInstallments
+                        ? '${projected.dueInstallments.length} cuota(s) este mes'
+                        : 'Sin cuotas comprometidas')
+                    : 'Toca para confirmar y empezar el mes',
+                style: TextStyle(
+                  color: projected.savingsConfirmed
+                      ? context.mutedTextColor
+                      : AppTheme.primary,
+                  fontWeight: projected.savingsConfirmed
+                      ? FontWeight.w400
+                      : FontWeight.w600,
+                  fontSize: 12,
                 ),
-                titlesData: FlTitlesData(
-                  show: true,
-                  leftTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        final idx = value.toInt();
-                        if (idx < 0 || idx >= labels.length) {
-                          return const SizedBox();
-                        }
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(labels[idx],
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  fontSize: 10,
-                                  color: context.mutedTextColor)),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                gridData: const FlGridData(show: false),
-                barGroups: [
-                  BarChartGroupData(x: 0, barRods: [
-                    BarChartRodData(
-                      toY: carried.abs(),
-                      color: carried >= 0 ? AppTheme.savings : AppTheme.cost,
-                      width: 32,
-                      borderRadius:
-                          const BorderRadius.vertical(top: Radius.circular(6)),
-                    ),
-                  ]),
-                  BarChartGroupData(x: 1, barRods: [
-                    BarChartRodData(
-                      toY: expenses,
-                      color: AppTheme.cost,
-                      width: 32,
-                      borderRadius:
-                          const BorderRadius.vertical(top: Radius.circular(6)),
-                    ),
-                  ]),
-                  BarChartGroupData(x: 2, barRods: [
-                    BarChartRodData(
-                      toY: balance.abs(),
-                      color: balance >= 0
-                          ? AppTheme.primary
-                          : AppTheme.cost.withValues(alpha: 0.6),
-                      width: 32,
-                      borderRadius:
-                          const BorderRadius.vertical(top: Radius.circular(6)),
-                    ),
-                  ]),
-                ],
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _ChartLegend(
-                label: 'Saldo Arrastrado',
-                value: CurrencyFormatter.format(carried),
-                color: carried >= 0 ? AppTheme.savings : AppTheme.cost,
-              ),
-              _ChartLegend(
-                label: 'Balance Proyect.',
-                value: CurrencyFormatter.format(balance),
-                color: balance >= 0 ? AppTheme.primary : AppTheme.cost,
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -34,6 +34,7 @@ class _DetailScreenState extends State<DetailScreen> {
   TransactionFilter _filter = TransactionFilter.all;
   String? _selectedCategory;
   late ExpenseCategoryLookup _categoryLookup;
+  double _installmentCommitment = 0;
 
   @override
   void initState() {
@@ -53,6 +54,10 @@ class _DetailScreenState extends State<DetailScreen> {
           ? settingsState.expenseCategories
           : const [],
     );
+    _installmentCommitment = settingsState is SettingsLoaded
+        ? settingsState.installments.where((i) => !i.isIncoming).fold(
+            0.0, (sum, i) => sum + i.dueAmountForMonth(widget.year, widget.month))
+        : 0.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -154,6 +159,7 @@ class _DetailScreenState extends State<DetailScreen> {
       previousCost: _sum(prevCosts),
       categoryDisplayNames: _categoryLookup.displayNameMap,
       categorySections: _categoryLookup.sectionMap,
+      monthlyInstallmentCommitment: _installmentCommitment,
     );
 
     return SingleChildScrollView(

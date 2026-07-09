@@ -6,6 +6,8 @@ import 'package:mis_finanzas/data/models/payment_method.dart';
 import 'package:mis_finanzas/data/models/expense_category.dart';
 import 'package:mis_finanzas/data/models/installment.dart';
 import 'package:mis_finanzas/data/models/savings_confirmation.dart';
+import 'package:mis_finanzas/data/models/bank_connection.dart';
+import 'package:mis_finanzas/data/models/payment_method_totals.dart';
 import 'package:mis_finanzas/domain/repositories/finance_repository.dart';
 
 class FakeFinanceRepository implements FinanceRepository {
@@ -83,6 +85,22 @@ class FakeFinanceRepository implements FinanceRepository {
 
   @override
   Future<List<SavingsConfirmation>> getAllSavingsConfirmations() async => [];
+
+  @override
+  Future<List<BankConnection>> getBankConnections() async => [];
+
+  @override
+  Future<void> addBankConnection(BankConnection connection) async {}
+
+  @override
+  Future<void> deleteBankConnection(int id) async {}
+
+  @override
+  Future<Map<int, PaymentMethodTotals>> getPaymentMethodTotals() async => {};
+
+  @override
+  Future<Map<String, Map<int, PaymentMethodTotals>>>
+      getMonthlyPaymentMethodTotals() async => {};
 }
 
 void main() {

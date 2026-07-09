@@ -1,3 +1,4 @@
+import '../../core/constants/institution_catalog.dart';
 import '../../data/models/expense_category.dart';
 import '../../data/models/installment.dart';
 
@@ -58,4 +59,16 @@ class AddPaymentMethodEvent extends SettingsEvent {
 class DeletePaymentMethodEvent extends SettingsEvent {
   final int id;
   DeletePaymentMethodEvent({required this.id});
+}
+
+// --- Bank connections ---
+
+class ConnectInstitutionEvent extends SettingsEvent {
+  final Institution institution;
+  ConnectInstitutionEvent({required this.institution});
+}
+
+class DisconnectInstitutionEvent extends SettingsEvent {
+  final int id;
+  DisconnectInstitutionEvent({required this.id});
 }

@@ -8,6 +8,12 @@ class AppTheme {
   static const Color cost = Color(0xFFDC2626);
   static const Color savings = Color(0xFF3B82F6);
 
+  // Psicologia del color para instituciones: azul profundo transmite
+  // confianza y seguridad (bancos); ambar transmite energia de consumo y
+  // precaucion (casas comerciales, credito de consumo).
+  static const Color bankTrust = Color(0xFF2563EB);
+  static const Color retailWarm = Color(0xFFF59E0B);
+
   // Dark theme colors
   static const Color background = Color(0xFF0B0B0D);
   static const Color surface = Color(0xFF141419);
