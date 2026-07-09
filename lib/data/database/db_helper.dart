@@ -1,7 +1,11 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:path/path.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+import 'desktop_db_factory_stub.dart'
+    if (dart.library.io) 'desktop_db_factory_io.dart';
 import '../models/transaction_item.dart';
 import '../models/monthly_summary.dart';
 import '../models/income_source.dart';
@@ -32,6 +36,13 @@ class DbHelper {
     return _database!;
   }
 
+  /// Windows y Linux no tienen implementación nativa del plugin `sqflite`;
+  /// necesitan el motor sqlite3 vía FFI. Android, iOS y macOS sí la tienen.
+  static bool get _needsFfiDesktop =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.linux);
+
   Future<Database> _initDB(String filePath) async {
     if (kIsWeb) {
       return await databaseFactoryFfiWeb.openDatabase(
@@ -43,6 +54,20 @@ class DbHelper {
         ),
       );
     }
+
+    if (_needsFfiDesktop) {
+      final directory = await getApplicationSupportDirectory();
+      final path = join(directory.path, filePath);
+      return await desktopDatabaseFactory.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 6,
+          onCreate: _createDB,
+          onUpgrade: _onUpgrade,
+        ),
+      );
+    }
+
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
     return await openDatabase(
